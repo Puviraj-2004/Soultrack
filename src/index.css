@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* src/index.css */
+
+/* pull-to-refresh reload blocked and safe overscroll handling */
+html, body {
+  overscroll-behavior-y: contain; 
+  overflow-x: hidden;
+  height: 100dvh; /* Dynamic viewport heights native standards */
+  user-select: none; /* Text selection select mobile-la blur triggers blocked */
+  -webkit-user-select: none;
+}
+
+/* Dynamic height wrapper */
+.mobile-height {
+  height: 100dvh;
+}
+
+/* iOS & Mobile notched layouts dynamic safe area utilities padding support */
+.safe-padding-top {
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+}
+
+.safe-padding-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Bottom mini player padding helper */
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
