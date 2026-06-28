@@ -14,7 +14,7 @@ export default function MiniPlayer() {
     currentSong, isPlaying, currentTime, duration,
     togglePlay, handleNext, handlePrev, seek,
     volume, setVolume, shuffle, repeat,
-    toggleShuffle, toggleRepeat
+    toggleShuffle, toggleRepeat, closePlayer
   } = usePlayer()
 
   const [expanded, setExpanded] = useState(false)
@@ -125,6 +125,17 @@ export default function MiniPlayer() {
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
               Now Playing
+            </button>
+            <button
+              onClick={closePlayer}
+              className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:bg-gray-50"
+              style={{ color: APP_CONFIG.theme.textMuted, borderColor: APP_CONFIG.theme.surfaceHover }}
+              aria-label="Close player"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
             </button>
           </div>
 
@@ -238,7 +249,7 @@ export default function MiniPlayer() {
       )}
 
       {/* Mini Player Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-safe" style={{ backgroundColor: 'transparent' }}>
+      <div className="fixed bottom-20 left-0 right-0 z-40 px-3" style={{ backgroundColor: 'transparent' }}>
         <div
           className="rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-lg border backdrop-blur-md transition-all"
           style={{ 
@@ -258,6 +269,17 @@ export default function MiniPlayer() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={closePlayer}
+              className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-gray-100"
+              style={{ color: APP_CONFIG.theme.textMuted }}
+              aria-label="Close player"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
             <button 
               onClick={handlePrev} 
               className="transition-all active:scale-90"

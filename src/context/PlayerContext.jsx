@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react'
+import { recordSongPlay } from '../lib/songs'
 
 const PlayerContext = createContext(null)
 
@@ -18,6 +19,7 @@ export function PlayerProvider({ children }) {
   const repeatRef = useRef(repeat)
   const shuffleRef = useRef(shuffle)
   const isPlayingRef = useRef(isPlaying)
+  const shouldAutoPlayRef = useRef(false)
 
   useEffect(() => { queueRef.current = queue }, [queue])
   useEffect(() => { currentSongRef.current = currentSong }, [currentSong])
@@ -30,20 +32,32 @@ export function PlayerProvider({ children }) {
     const cur = currentSongRef.current
     const rep = repeatRef.current
     const shuf = shuffleRef.current
-    if (rep === 'one') {
-      audioRef.current.currentTime = 0
-      audioRef.current.play()
+
+    if (!q.length) {
+      audioRef.current.pause()
+      setIsPlaying(false)
       return
     }
+
+    if (rep === 'one') {
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch(console.error)
+      return
+    }
+
     const idx = q.findIndex(s => s.id === cur?.id)
-    const nextIdx = shuf ? Math.floor(Math.random() * q.length) : idx + 1
+    const nextIdx = shuf ? Math.floor(Math.random() * q.length) : Math.max(idx, 0) + 1
+
     if (nextIdx < q.length) {
+      shouldAutoPlayRef.current = true
       setCurrentSong(q[nextIdx])
     } else if (rep === 'all') {
+      shouldAutoPlayRef.current = true
       setCurrentSong(q[0])
     } else {
       audioRef.current.pause()
       setIsPlaying(false)
+      shouldAutoPlayRef.current = false
     }
   }, [])
 
@@ -56,7 +70,10 @@ export function PlayerProvider({ children }) {
     const q = queueRef.current
     const cur = currentSongRef.current
     const idx = q.findIndex(s => s.id === cur?.id)
-    if (idx > 0) setCurrentSong(q[idx - 1])
+    if (idx > 0) {
+      shouldAutoPlayRef.current = true
+      setCurrentSong(q[idx - 1])
+    }
   }, [])
 
   const togglePlay = useCallback(() => {
@@ -65,30 +82,44 @@ export function PlayerProvider({ children }) {
       audio.pause()
       setIsPlaying(false)
     } else {
+      shouldAutoPlayRef.current = true
       audio.play().catch(console.error)
-      setIsPlaying(true)
     }
   }, [])
 
   // Audio event listeners
   useEffect(() => {
     const audio = audioRef.current
+    const onLoadStart = () => {
+      setCurrentTime(0)
+      setDuration(0)
+    }
     const onTimeUpdate = () => setCurrentTime(audio.currentTime)
     const onDurationChange = () => setDuration(audio.duration)
     const onEnded = () => handleNext()
+    const onError = () => {
+      console.error('Audio failed to play:', currentSongRef.current?.title || audio.src)
+      handleNext()
+    }
     const onPlay = () => setIsPlaying(true)
-    const onPause = () => setIsPlaying(false)
+    const onPause = () => {
+      if (!audio.ended) setIsPlaying(false)
+    }
 
+    audio.addEventListener('loadstart', onLoadStart)
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('durationchange', onDurationChange)
     audio.addEventListener('ended', onEnded)
+    audio.addEventListener('error', onError)
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
 
     return () => {
+      audio.removeEventListener('loadstart', onLoadStart)
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('durationchange', onDurationChange)
       audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener('error', onError)
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
     }
@@ -100,7 +131,10 @@ export function PlayerProvider({ children }) {
     const audio = audioRef.current
     audio.src = currentSong.cloudinary_url
     audio.load()
-    audio.play().catch(console.error)
+    recordSongPlay(currentSong)
+    if (shouldAutoPlayRef.current) {
+      audio.play().catch(console.error)
+    }
   }, [currentSong])
 
   // Volume
@@ -109,8 +143,22 @@ export function PlayerProvider({ children }) {
   }, [volume])
 
   function playSong(song, songQueue = []) {
-    if (songQueue.length > 0) setQueue(songQueue)
+    shouldAutoPlayRef.current = true
+    setQueue(songQueue.length > 0 ? songQueue : [song])
     setCurrentSong(song)
+  }
+
+  function closePlayer() {
+    const audio = audioRef.current
+    shouldAutoPlayRef.current = false
+    audio.pause()
+    audio.removeAttribute('src')
+    audio.load()
+    setCurrentSong(null)
+    setQueue([])
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
   }
 
   function seek(time) {
@@ -128,7 +176,7 @@ export function PlayerProvider({ children }) {
       currentSong, isPlaying, currentTime, duration,
       volume, shuffle, repeat, queue,
       playSong, togglePlay, handleNext, handlePrev,
-      seek, setVolume, toggleShuffle, toggleRepeat
+      closePlayer, seek, setVolume, toggleShuffle, toggleRepeat
     }}>
       {children}
     </PlayerContext.Provider>

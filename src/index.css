@@ -29,3 +29,12 @@ html, body {
 .pb-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
+
+.bottom-sheet {
+  max-height: calc(100dvh - 7rem);
+  margin-bottom: max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem));
+}
+
+.bottom-sheet-scroll {
+  max-height: calc(100dvh - 24rem);
+}

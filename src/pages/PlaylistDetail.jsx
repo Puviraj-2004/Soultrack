@@ -64,6 +64,10 @@ export default function PlaylistDetail() {
     setShowAdd,
     deleteTarget,
     setDeleteTarget,
+    moveTarget,
+    setMoveTarget,
+    movingSong,
+    moveError,
     showMenu,
     setShowMenu,
     showEditPlaylist,
@@ -74,6 +78,8 @@ export default function PlaylistDetail() {
     setPlaylistForm,
     cloudinaryUrl,
     setCloudinaryUrl,
+    songFile,
+    handleSongFileChange,
     titleInput,
     setTitleInput,
     artistInput,
@@ -82,16 +88,22 @@ export default function PlaylistDetail() {
     setArtworkUrlInput,
     durationInput,
     adding,
+    uploading,
     fetchingArt,
+    addError,
+    resetAddForm,
     activeSongDropdownId,
     menuRef,
     handleAddSong,
     handleDeleteSong,
+    openMoveSong,
+    handleMoveSong,
     handleEditPlaylist,
     handleDeletePlaylist,
     toggleDropdown,
     handleRowClick,
     currentSong,
+    playlists,
     isPlaying,
     togglePlay,
     navigate
@@ -114,7 +126,7 @@ export default function PlaylistDetail() {
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
           <button 
-            onClick={() => navigate('/')} 
+            onClick={() => navigate('/playlists')} 
             className="font-semibold transition-colors text-sm hover:text-black"
             style={{ color: APP_CONFIG.theme.textMuted }}
           >
@@ -191,11 +203,11 @@ export default function PlaylistDetail() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xs font-bold tracking-wider" style={{ color: APP_CONFIG.theme.textMuted }}>SONGS</h2>
           <button
-            onClick={() => setShowAdd(true)}
+            onClick={() => navigate('/')}
             className="text-xs px-4 py-2 rounded-full font-bold shadow transition-transform active:scale-95"
             style={{ backgroundColor: APP_CONFIG.theme.primary, color: '#fff' }}
           >
-            + Add Song
+            Library
           </button>
         </div>
 
@@ -205,7 +217,7 @@ export default function PlaylistDetail() {
           <div className="text-center py-16 border rounded-2xl bg-gray-50 border-dashed" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
             <p className="text-4xl mb-3">🎶</p>
             <p className="font-bold" style={{ color: APP_CONFIG.theme.textMuted }}>No songs yet</p>
-            <p className="text-xs mt-1 font-medium" style={{ color: APP_CONFIG.theme.textMuted }}>Paste a Cloudinary URL to add!</p>
+            <p className="text-xs mt-1 font-medium" style={{ color: APP_CONFIG.theme.textMuted }}>Add songs from Home, then attach them here.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -277,11 +289,18 @@ export default function PlaylistDetail() {
                             Play
                           </button>
                           <button
+                            onClick={(e) => { e.stopPropagation(); openMoveSong(song); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-gray-50 rounded-lg transition-colors text-black mt-0.5"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 7h12"/><path d="M8 12h12"/><path d="M8 17h12"/><path d="M4 7h.01"/><path d="M4 12h.01"/><path d="M4 17h.01"/></svg>
+                            Add
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); setDeleteTarget(song); toggleDropdown(e, null); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-red-50 text-red-600 rounded-lg transition-colors mt-0.5"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                            Delete
+                            Remove
                           </button>
                         </div>
                       </>
@@ -329,12 +348,38 @@ export default function PlaylistDetail() {
             {/* Inputs Form */}
             <div className="flex flex-col gap-4 max-h-75 overflow-y-auto mb-6 pr-1">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold" style={{ color: APP_CONFIG.theme.textMuted }}>Cloudinary URL *</label>
+                <label className="text-xs font-bold" style={{ color: APP_CONFIG.theme.textMuted }}>Upload Audio File</label>
+                <label
+                  className="w-full rounded-xl px-3 py-3 text-sm border bg-white cursor-pointer font-semibold"
+                  style={{ color: APP_CONFIG.theme.text, borderColor: APP_CONFIG.theme.surfaceHover }}
+                >
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={e => handleSongFileChange(e.target.files?.[0] || null)}
+                  />
+                  {songFile ? songFile.name : 'Choose song from device'}
+                </label>
+                {songFile && (
+                  <button
+                    type="button"
+                    onClick={() => handleSongFileChange(null)}
+                    className="self-start text-xs font-bold"
+                    style={{ color: APP_CONFIG.theme.primary }}
+                  >
+                    Use a link instead
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold" style={{ color: APP_CONFIG.theme.textMuted }}>Song URL</label>
                 <input
                   type="url"
-                  required
+                  disabled={!!songFile}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none border focus:ring-1 bg-white"
-                  style={{ color: APP_CONFIG.theme.text, borderColor: APP_CONFIG.theme.surfaceHover, '--tw-ring-color': APP_CONFIG.theme.primary }}
+                  style={{ color: APP_CONFIG.theme.text, borderColor: APP_CONFIG.theme.surfaceHover, '--tw-ring-color': APP_CONFIG.theme.primary, opacity: songFile ? 0.45 : 1 }}
                   placeholder="https://res.cloudinary.com/..."
                   value={cloudinaryUrl}
                   onChange={e => setCloudinaryUrl(e.target.value)}
@@ -376,12 +421,15 @@ export default function PlaylistDetail() {
                   onChange={e => setArtworkUrlInput(e.target.value)}
                 />
               </div>
+
+              {addError && (
+                <p className="text-xs font-semibold" style={{ color: '#FF006E' }}>{addError}</p>
+              )}
             </div>
 
             <div className="flex gap-3 border-t pt-4" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
               <button
-                // eslint-disable-next-line no-undef
-                onClick={() => { setShowAdd(false); setCloudinaryUrl(''); setTitleInput(''); setArtworkUrlInput(''); setArtistInput('Unknown Artist'); setDurationInput(0); }}
+                onClick={() => { setShowAdd(false); resetAddForm(); }}
                 className="flex-1 py-3 rounded-xl text-sm font-bold border hover:bg-gray-50"
                 style={{ backgroundColor: '#ffffff', color: APP_CONFIG.theme.textMuted, borderColor: APP_CONFIG.theme.surfaceHover }}
               >
@@ -389,16 +437,72 @@ export default function PlaylistDetail() {
               </button>
               <button
                 onClick={handleAddSong}
-                disabled={adding || !cloudinaryUrl.trim()}
+                disabled={adding || (!songFile && !cloudinaryUrl.trim())}
                 className="flex-1 py-3 rounded-xl text-sm font-bold shadow-md transition-transform active:scale-95 text-white"
                 style={{
                   backgroundColor: APP_CONFIG.theme.primary,
-                  opacity: (adding || !cloudinaryUrl.trim()) ? 0.5 : 1
+                  opacity: (adding || (!songFile && !cloudinaryUrl.trim())) ? 0.5 : 1
                 }}
               >
-                {adding ? 'Adding...' : 'Add'}
+                {uploading ? 'Uploading...' : adding ? 'Adding...' : 'Add'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Song To Playlist Modal */}
+      {moveTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <div className="w-full max-w-md rounded-t-3xl p-6 shadow-2xl border bg-white" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
+            <h3 className="text-lg font-bold mb-1" style={{ color: APP_CONFIG.theme.text }}>Add to Playlist</h3>
+            <p className="text-sm mb-5 truncate" style={{ color: APP_CONFIG.theme.textMuted }}>
+              {moveTarget.title}
+            </p>
+
+            <div className="flex flex-col gap-2 mb-5 max-h-72 overflow-y-auto">
+              {playlists.filter(pl => pl.id !== playlist.id).length === 0 ? (
+                <div className="text-sm font-semibold text-center py-6 rounded-2xl border" style={{ color: APP_CONFIG.theme.textMuted, borderColor: APP_CONFIG.theme.surfaceHover }}>
+                  Create another playlist first.
+                </div>
+              ) : (
+                playlists
+                  .filter(pl => pl.id !== playlist.id)
+                  .map(pl => (
+                    <button
+                      key={pl.id}
+                      onClick={() => handleMoveSong(pl.id)}
+                      disabled={movingSong}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl border text-left hover:bg-gray-50 disabled:opacity-50"
+                      style={{ borderColor: APP_CONFIG.theme.surfaceHover }}
+                    >
+                      <span
+                        className="w-10 h-10 rounded-xl shrink-0"
+                        style={{ backgroundColor: pl.cover_color || APP_CONFIG.theme.primary }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold truncate" style={{ color: APP_CONFIG.theme.text }}>{pl.name}</span>
+                        <span className="block text-xs font-semibold mt-0.5" style={{ color: APP_CONFIG.theme.textMuted }}>
+                          Add here
+                        </span>
+                      </span>
+                    </button>
+                  ))
+              )}
+            </div>
+
+            {moveError && (
+              <p className="text-xs font-semibold mb-4" style={{ color: '#FF006E' }}>{moveError}</p>
+            )}
+
+            <button
+              onClick={() => setMoveTarget(null)}
+              disabled={movingSong}
+              className="w-full py-3 rounded-xl text-sm font-bold border hover:bg-gray-50 disabled:opacity-50"
+              style={{ backgroundColor: '#ffffff', color: APP_CONFIG.theme.textMuted, borderColor: APP_CONFIG.theme.surfaceHover }}
+            >
+              {movingSong ? 'Adding...' : 'Done'}
+            </button>
           </div>
         </div>
       )}
@@ -407,9 +511,9 @@ export default function PlaylistDetail() {
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-6" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
           <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl border bg-white" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
-            <h3 className="text-lg font-bold mb-2" style={{ color: APP_CONFIG.theme.text }}>Remove Song?</h3>
+            <h3 className="text-lg font-bold mb-2" style={{ color: APP_CONFIG.theme.text }}>Remove From Playlist?</h3>
             <p className="text-sm mb-6" style={{ color: APP_CONFIG.theme.textMuted }}>
-              "{deleteTarget.title}" will be removed.
+              "{deleteTarget.title}" will stay in your library.
             </p>
             <div className="flex gap-3">
               <button
