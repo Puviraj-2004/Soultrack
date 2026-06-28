@@ -14,40 +14,39 @@ export default defineConfig({
         name: 'Soultrack',
         short_name: 'Soultrack',
         description: 'Your songs, your story',
-        theme_color: '#ffffff',      // App header background color
-        background_color: '#ffffff', // Splash screen background
-        display: 'standalone',       // Immersive full-screen app view
+        theme_color: '#ffffff',      
+        background_color: '#ffffff', 
+        display: 'standalone',       
         orientation: 'portrait',
         icons: [
           {
-            src: 'pwa-192x192.png', // Unga custom 192px icon path [2.2.1]
+            src: 'pwa-192x192.png', 
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'pwa-512x512.png', // Unga custom 512px icon path [2.2.1]
+            src: 'pwa-512x512.png', 
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'  // Android rounded dynamic icons-ku adaptive tharum [2.2.1]
+            purpose: 'any maskable'  
           }
         ]
       },
       workbox: {
-        // Cloudinary media files dynamic range-requests support
+        // CORRECTED: Cloudinary audio-vai thavirthu, IMAGES mattum cache seiyum dynamic pattern
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
+            urlPattern: /^https:\/\/res\.cloudinary\.com\/.*\.(png|jpg|jpeg|webp|gif|svg)/i, // Matches only images
             handler: 'CacheFirst',
             options: {
-              cacheName: 'cloudinary-assets',
+              cacheName: 'cloudinary-images',
               expiration: {
-                maxEntries: 100, // Maximum cached files count
-                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 Days cache validity
+                maxEntries: 100, 
+                maxAgeSeconds: 30 * 24 * 60 * 60 
               },
               cacheableResponse: {
                 statuses: [0, 200]
-              },
-              rangeRequests: true // iOS Background media standard play-ku compulsory
+              }
             }
           }
         ]
