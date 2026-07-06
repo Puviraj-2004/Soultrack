@@ -33,13 +33,13 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // CORRECTED: Cloudinary audio-vai thavirthu, IMAGES mattum cache seiyum dynamic pattern
+        // Cache remote cover images only; audio stays streamed by the browser.
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/res\.cloudinary\.com\/.*\.(png|jpg|jpeg|webp|gif|svg)/i, // Matches only images
+            urlPattern: /^https:\/\/res\.cloudinary\.com\/.*\.(png|jpg|jpeg|webp|gif|svg)/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'cloudinary-images',
+              cacheName: 'remote-cover-images',
               expiration: {
                 maxEntries: 100, 
                 maxAgeSeconds: 30 * 24 * 60 * 60 

@@ -380,7 +380,7 @@ export default function PlaylistDetail() {
                   disabled={!!songFile}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none border focus:ring-1 bg-white"
                   style={{ color: APP_CONFIG.theme.text, borderColor: APP_CONFIG.theme.surfaceHover, '--tw-ring-color': APP_CONFIG.theme.primary, opacity: songFile ? 0.45 : 1 }}
-                  placeholder="https://res.cloudinary.com/..."
+                  placeholder="Paste audio URL"
                   value={cloudinaryUrl}
                   onChange={e => setCloudinaryUrl(e.target.value)}
                 />

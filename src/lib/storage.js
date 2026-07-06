@@ -1,21 +1,11 @@
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
-const CLOUDINARY_FOLDER = import.meta.env.VITE_CLOUDINARY_FOLDER
+const R2_UPLOAD_URL = import.meta.env.VITE_R2_UPLOAD_URL
+const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_URL
 
-export async function uploadSongFile(file, playlistId, onProgress) {
-  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-    throw new Error('Cloudinary cloud name and unsigned upload preset are required.')
-  }
+function normalizePublicUrl(url) {
+  return url?.replace(/\/$/, '')
+}
 
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
-  formData.append('context', `playlist_id=${playlistId}`)
-
-  if (CLOUDINARY_FOLDER) {
-    formData.append('folder', `${CLOUDINARY_FOLDER}/${playlistId}`)
-  }
-
+function uploadWithProgress({ url, formData, onProgress, providerName, resolveUrl }) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()
 
@@ -30,22 +20,51 @@ export async function uploadSongFile(file, playlistId, onProgress) {
       try {
         data = JSON.parse(request.responseText)
       } catch {
-        reject(new Error('Cloudinary returned an invalid response.'))
+        reject(new Error(`${providerName} returned an invalid response.`))
         return
       }
 
       if (request.status < 200 || request.status >= 300) {
-        reject(new Error(data.error?.message || 'Cloudinary upload failed.'))
+        reject(new Error(data.error?.message || data.error || `${providerName} upload failed.`))
+        return
+      }
+
+      const publicUrl = resolveUrl(data)
+      if (!publicUrl) {
+        reject(new Error(`${providerName} upload succeeded but no public URL was returned.`))
         return
       }
 
       onProgress?.(100)
-      resolve(data.secure_url)
+      resolve(publicUrl)
     })
 
-    request.addEventListener('error', () => reject(new Error('Cloudinary upload failed. Check your connection.')))
-    request.addEventListener('abort', () => reject(new Error('Cloudinary upload was cancelled.')))
-    request.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`)
+    request.addEventListener('error', () => reject(new Error(`${providerName} upload failed. Check your connection.`)))
+    request.addEventListener('abort', () => reject(new Error(`${providerName} upload was cancelled.`)))
+    request.open('POST', url)
     request.send(formData)
+  })
+}
+
+export async function uploadSongFile(file, playlistId, onProgress) {
+  if (!R2_UPLOAD_URL) {
+    throw new Error('R2 upload URL is required.')
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('folder', playlistId || 'library')
+
+  return uploadWithProgress({
+    url: R2_UPLOAD_URL,
+    formData,
+    onProgress,
+    providerName: 'R2',
+    resolveUrl: data => {
+      if (data.url) return data.url
+      if (data.publicUrl) return data.publicUrl
+      if (data.key && R2_PUBLIC_URL) return `${normalizePublicUrl(R2_PUBLIC_URL)}/${data.key}`
+      return null
+    },
   })
 }

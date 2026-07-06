@@ -478,7 +478,7 @@ export default function Home() {
           <div className="w-full max-w-sm rounded-3xl border bg-white p-6 shadow-2xl" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
             <h3 className="mb-2 text-lg font-bold">Delete Song?</h3>
             <p className="mb-6 text-sm" style={{ color: APP_CONFIG.theme.textMuted }}>
-              "{deleteTarget.title}" will be removed from your library and every playlist. The Cloudinary file will stay stored.
+              "{deleteTarget.title}" will be removed from your library and every playlist. The R2 file will stay stored.
             </p>
             <div className="flex gap-3">
               <button

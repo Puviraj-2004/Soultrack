@@ -14,12 +14,14 @@ export function PlayerProvider({ children }) {
   const [repeat, setRepeat] = useState('none')
 
   const audioRef = useRef(new Audio())
+  const preloadAudioRef = useRef(new Audio())
   const queueRef = useRef(queue)
   const currentSongRef = useRef(currentSong)
   const repeatRef = useRef(repeat)
   const shuffleRef = useRef(shuffle)
   const isPlayingRef = useRef(isPlaying)
   const shouldAutoPlayRef = useRef(false)
+  const retryCountRef = useRef(0)
 
   useEffect(() => { queueRef.current = queue }, [queue])
   useEffect(() => { currentSongRef.current = currentSong }, [currentSong])
@@ -61,6 +63,12 @@ export function PlayerProvider({ children }) {
     }
   }, [])
 
+  const playQueueSong = useCallback((song) => {
+    if (!song) return
+    shouldAutoPlayRef.current = true
+    setCurrentSong(song)
+  }, [])
+
   const handlePrev = useCallback(() => {
     const audio = audioRef.current
     if (audio.currentTime > 3) {
@@ -98,7 +106,20 @@ export function PlayerProvider({ children }) {
     const onDurationChange = () => setDuration(audio.duration)
     const onEnded = () => handleNext()
     const onError = () => {
-      console.error('Audio failed to play:', currentSongRef.current?.title || audio.src)
+      const failedSong = currentSongRef.current
+      console.error('Audio failed to play:', failedSong?.title || audio.src)
+
+      if (retryCountRef.current < 1 && failedSong?.cloudinary_url) {
+        retryCountRef.current += 1
+        setTimeout(() => {
+          audio.src = failedSong.cloudinary_url
+          audio.load()
+          if (shouldAutoPlayRef.current) audio.play().catch(console.error)
+        }, 1200)
+        return
+      }
+
+      retryCountRef.current = 0
       handleNext()
     }
     const onPlay = () => setIsPlaying(true)
@@ -129,6 +150,7 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     if (!currentSong) return
     const audio = audioRef.current
+    retryCountRef.current = 0
     audio.src = currentSong.cloudinary_url
     audio.load()
     recordSongPlay(currentSong)
@@ -136,6 +158,22 @@ export function PlayerProvider({ children }) {
       audio.play().catch(console.error)
     }
   }, [currentSong])
+
+  useEffect(() => {
+    const q = queueRef.current
+    const cur = currentSongRef.current
+    const idx = q.findIndex(s => s.id === cur?.id)
+    const nextSong = idx >= 0 ? q[idx + 1] : null
+
+    if (!nextSong?.cloudinary_url) {
+      preloadAudioRef.current.removeAttribute('src')
+      return
+    }
+
+    preloadAudioRef.current.preload = 'auto'
+    preloadAudioRef.current.src = nextSong.cloudinary_url
+    preloadAudioRef.current.load()
+  }, [currentSong, queue])
 
   // Volume
   useEffect(() => {
@@ -161,6 +199,9 @@ export function PlayerProvider({ children }) {
     setDuration(0)
   }
 
+  const currentIndex = queue.findIndex(song => song.id === currentSong?.id)
+  const upcomingQueue = currentIndex >= 0 ? queue.slice(currentIndex + 1) : []
+
   function seek(time) {
     audioRef.current.currentTime = time
     setCurrentTime(time)
@@ -174,9 +215,9 @@ export function PlayerProvider({ children }) {
   return (
     <PlayerContext.Provider value={{
       currentSong, isPlaying, currentTime, duration,
-      volume, shuffle, repeat, queue,
+      volume, shuffle, repeat, queue, currentIndex, upcomingQueue,
       playSong, togglePlay, handleNext, handlePrev,
-      closePlayer, seek, setVolume, toggleShuffle, toggleRepeat
+      closePlayer, playQueueSong, seek, setVolume, toggleShuffle, toggleRepeat
     }}>
       {children}
     </PlayerContext.Provider>

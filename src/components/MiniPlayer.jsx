@@ -13,11 +13,13 @@ export default function MiniPlayer() {
   const {
     currentSong, isPlaying, currentTime, duration,
     togglePlay, handleNext, handlePrev, seek,
-    volume, setVolume, shuffle, repeat,
-    toggleShuffle, toggleRepeat, closePlayer
+    queue, currentIndex, upcomingQueue,
+    shuffle, repeat,
+    toggleShuffle, toggleRepeat, closePlayer, playQueueSong
   } = usePlayer()
 
   const [expanded, setExpanded] = useState(false)
+  const [showQueue, setShowQueue] = useState(false)
 
   // Swipe Down to Close Gesture Logic (Mobile friendly)
   const touchStartY = useRef(0)
@@ -34,6 +36,7 @@ export default function MiniPlayer() {
     // Downward swipe 120px threshold value reach aanal close trigger aagum
     if (difference > 120) {
       setExpanded(false)
+      setShowQueue(false)
     }
   }
 
@@ -119,7 +122,7 @@ export default function MiniPlayer() {
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-4 pb-2">
             <button 
-              onClick={() => setExpanded(false)} 
+              onClick={() => { setExpanded(false); setShowQueue(false) }} 
               className="flex items-center gap-2 text-sm font-semibold transition-colors"
               style={{ color: APP_CONFIG.theme.textMuted }}
             >
@@ -222,29 +225,109 @@ export default function MiniPlayer() {
               </button>
             </div>
 
-            {/* Volume Control */}
-            <div className="flex items-center gap-3 w-full px-2 mb-6" onTouchStart={preventSliderGesture} onTouchMove={preventSliderGesture}>
-              <span style={{ color: APP_CONFIG.theme.textMuted }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/></svg>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
-                onChange={e => setVolume(Number(e.target.value))}
-                className="flex-1 h-1 rounded-full appearance-none cursor-pointer"
-                style={{ 
-                  accentColor: APP_CONFIG.theme.primary,
-                  backgroundColor: APP_CONFIG.theme.surfaceHover 
-                }}
-              />
-              <span style={{ color: APP_CONFIG.theme.textMuted }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-              </span>
+            {/* Queue Launcher */}
+            <div className="w-full px-2 mb-6">
+              <button
+                onClick={() => setShowQueue(true)}
+                className="flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm active:scale-[0.99]"
+                style={{ borderColor: APP_CONFIG.theme.surfaceHover }}
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: APP_CONFIG.theme.accent, color: APP_CONFIG.theme.primary }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 6h13" />
+                    <path d="M8 12h13" />
+                    <path d="M8 18h13" />
+                    <path d="M3 6h.01" />
+                    <path d="M3 12h.01" />
+                    <path d="M3 18h.01" />
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold" style={{ color: APP_CONFIG.theme.text }}>Up next</p>
+                  <p className="mt-0.5 truncate text-xs font-semibold" style={{ color: APP_CONFIG.theme.textMuted }}>
+                    {upcomingQueue[0] ? upcomingQueue[0].title : 'End of queue'}
+                  </p>
+                </div>
+                <span className="text-xs font-bold" style={{ color: APP_CONFIG.theme.textMuted }}>
+                  {queue.length ? `${currentIndex + 1}/${queue.length}` : '0/0'}
+                </span>
+              </button>
             </div>
           </div>
+
+          {showQueue && (
+            <div className="fixed inset-0 z-[80] flex items-end" style={{ backgroundColor: 'rgba(0,0,0,0.35)' }} onClick={() => setShowQueue(false)}>
+              <div
+                className="h-[52dvh] max-h-[52dvh] w-full rounded-t-3xl border bg-white p-5 pb-safe shadow-2xl"
+                style={{ borderColor: APP_CONFIG.theme.surfaceHover }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="mx-auto mb-4 h-1.5 w-12 rounded-full" style={{ backgroundColor: APP_CONFIG.theme.surfaceHover }} />
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold" style={{ color: APP_CONFIG.theme.text }}>Up next</h3>
+                    <p className="mt-0.5 text-xs font-semibold" style={{ color: APP_CONFIG.theme.textMuted }}>
+                      {queue.length ? `${queue.length} songs in queue` : 'No queue'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowQueue(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border"
+                    style={{ color: APP_CONFIG.theme.textMuted, borderColor: APP_CONFIG.theme.surfaceHover }}
+                    aria-label="Close queue"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="max-h-[34dvh] overflow-y-auto rounded-2xl border" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
+                  {queue.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-sm font-semibold" style={{ color: APP_CONFIG.theme.textMuted }}>
+                      No songs in queue
+                    </div>
+                  ) : (
+                    queue.map((song, idx) => {
+                      const active = song.id === currentSong.id
+                      return (
+                        <button
+                          key={`${song.id}-${idx}`}
+                          onClick={() => {
+                            playQueueSong(song)
+                            setShowQueue(false)
+                          }}
+                          className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0 hover:bg-gray-50"
+                          style={{
+                            borderColor: APP_CONFIG.theme.surfaceHover,
+                            backgroundColor: active ? APP_CONFIG.theme.accent : '#ffffff',
+                          }}
+                        >
+                          <span className="w-5 shrink-0 text-center text-xs font-bold" style={{ color: active ? APP_CONFIG.theme.primary : APP_CONFIG.theme.textMuted }}>
+                            {active ? '▶' : idx + 1}
+                          </span>
+                          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border bg-white" style={{ borderColor: APP_CONFIG.theme.surfaceHover }}>
+                            {song.artwork_url ? (
+                              <img src={song.artwork_url} alt={song.title} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-sm font-bold" style={{ color: APP_CONFIG.theme.primary, backgroundColor: APP_CONFIG.theme.accent }}>♪</div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold" style={{ color: active ? APP_CONFIG.theme.primary : APP_CONFIG.theme.text }}>{song.title}</p>
+                            <p className="mt-0.5 truncate text-xs font-semibold" style={{ color: APP_CONFIG.theme.textMuted }}>
+                              {song.artist || 'Unknown Artist'}
+                            </p>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
