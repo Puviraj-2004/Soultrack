@@ -12,9 +12,17 @@ function cleanExecError(err, fallback) {
   const lines = detail.split(/\r?\n/).filter(Boolean)
   const lastLine = lines[lines.length - 1].slice(0, 260)
   if (/Failed to extract any player response|Sign in to confirm/i.test(lastLine)) {
-    return `${lastLine} (Tip: YouTube may be blocking this server IP — configure YTDLP_COOKIES_B64 or YTDLP_PROXY, or use Upload Audio.)`
+    return `${lastLine} (Tip: YouTube may be blocking this server IP — check Render logs or configure YTDLP_COOKIES_B64 / YTDLP_PROXY, or use Upload Audio.)`
   }
   return lastLine
+}
+
+export function normalizeCookiesText(rawText) {
+  return String(rawText || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim()
 }
 
 export function createMediaTools(config) {
@@ -25,10 +33,16 @@ export function createMediaTools(config) {
     if (!config.ytDlpCookiesB64) return null
     if (cachedCookiesPath) return cachedCookiesPath
 
-    const raw = Buffer.from(config.ytDlpCookiesB64, 'base64').toString('utf8').trim()
-    if (!raw) return null
+    const input = config.ytDlpCookiesB64.trim()
+    const decoded = /^#\s*(Netscape|HTTP) Cookie File/i.test(input)
+      ? input
+      : Buffer.from(input, 'base64').toString('utf8')
+    const normalized = normalizeCookiesText(decoded)
+    if (!normalized) return null
     const target = path.join(os.tmpdir(), 'soultrack-yt-cookies.txt')
-    await fs.writeFile(target, `${raw}\n`, { encoding: 'utf8', mode: 0o600 })
+    await fs.writeFile(target, `${normalized}\n`, { encoding: 'utf8', mode: 0o600 })
+    const lineCount = normalized.split('\n').filter(l => l && !l.startsWith('#')).length
+    console.log(`[yt-dlp] Loaded cookies file (${lineCount} cookie entries)`)
     cachedCookiesPath = target
     return target
   }
@@ -38,14 +52,20 @@ export function createMediaTools(config) {
   }
 
   async function runYtDlp(args, timeoutMs) {
-    const baseArgs = ['--no-playlist', '--no-warnings', '--force-ipv4']
+    const baseArgs = ['--no-playlist', '--force-ipv4']
     if (config.ytDlpJsRuntime) {
       baseArgs.push('--js-runtimes', config.ytDlpJsRuntime, '--remote-components', 'ejs:github')
     }
     const cookiesPath = await resolveCookiesPath()
     if (cookiesPath) baseArgs.push('--cookies', cookiesPath)
     if (config.ytDlpProxy) baseArgs.push('--proxy', config.ytDlpProxy)
-    return runBin(config.ytDlpBin, [...baseArgs, ...args], timeoutMs)
+    try {
+      return await runBin(config.ytDlpBin, [...baseArgs, ...args], timeoutMs)
+    } catch (err) {
+      const stderrText = (err?.stderr || '').toString().trim()
+      if (stderrText) console.error(`[yt-dlp stderr]\n${stderrText}`)
+      throw err
+    }
   }
 
   return {

@@ -5,6 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createLoginRateLimiter, safeEqual, signAdminToken, verifyAdminToken } from '../src/auth.js'
 import { loadConfig, validateProductionConfig } from '../src/config.js'
+import { normalizeCookiesText } from '../src/media.js'
 import { createStorage } from '../src/storage.js'
 
 test('safeEqual and admin token signing/verification work with expiry', () => {
@@ -115,4 +116,12 @@ test('loadConfig sets yt-dlp runtime defaults and optional cookies/proxy overrid
   assert.equal(custom.ytDlpCookiesB64, 'IyBOZXRzY2FwZQ==')
   assert.equal(custom.ytDlpCookiesFile, '/tmp/cookies.txt')
   assert.equal(custom.ytDlpProxy, 'http://127.0.0.1:8888')
+})
+
+test('normalizeCookiesText strips BOM and converts CRLF to LF', () => {
+  const dirty = '\uFEFF# Netscape HTTP Cookie File\r\n.youtube.com\tTRUE\t/\tTRUE\t0\ta\tb\r\n'
+  assert.equal(
+    normalizeCookiesText(dirty),
+    '# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\ta\tb'
+  )
 })
