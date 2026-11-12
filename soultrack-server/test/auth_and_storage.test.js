@@ -97,3 +97,22 @@ test('validateProductionConfig enforces Neon URL, strong secrets, and cloud stor
     R2_PUBLIC_URL: 'https://pub-example.r2.dev',
   })))
 })
+
+test('loadConfig sets yt-dlp runtime defaults and optional cookies/proxy overrides', () => {
+  const defaults = loadConfig({})
+  assert.equal(defaults.ytDlpJsRuntime, 'node')
+  assert.equal(defaults.ytDlpCookiesB64, '')
+  assert.equal(defaults.ytDlpCookiesFile, '')
+  assert.equal(defaults.ytDlpProxy, '')
+
+  const custom = loadConfig({
+    YTDLP_JS_RUNTIME: '',
+    YTDLP_COOKIES_B64: 'IyBOZXRzY2FwZQ==',
+    YTDLP_COOKIES_FILE: '/tmp/cookies.txt',
+    YTDLP_PROXY: 'http://127.0.0.1:8888',
+  })
+  assert.equal(custom.ytDlpJsRuntime, '')
+  assert.equal(custom.ytDlpCookiesB64, 'IyBOZXRzY2FwZQ==')
+  assert.equal(custom.ytDlpCookiesFile, '/tmp/cookies.txt')
+  assert.equal(custom.ytDlpProxy, 'http://127.0.0.1:8888')
+})

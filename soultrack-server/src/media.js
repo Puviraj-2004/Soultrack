@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
@@ -9,23 +10,51 @@ function cleanExecError(err, fallback) {
   const detail = (err?.stderr || err?.message || '').toString().trim()
   if (!detail) return fallback
   const lines = detail.split(/\r?\n/).filter(Boolean)
-  return lines[lines.length - 1].slice(0, 300)
+  const lastLine = lines[lines.length - 1].slice(0, 260)
+  if (/Failed to extract any player response|Sign in to confirm/i.test(lastLine)) {
+    return `${lastLine} (Tip: YouTube may be blocking this server IP — configure YTDLP_COOKIES_B64 or YTDLP_PROXY, or use Upload Audio.)`
+  }
+  return lastLine
 }
 
 export function createMediaTools(config) {
+  let cachedCookiesPath = null
+
+  async function resolveCookiesPath() {
+    if (config.ytDlpCookiesFile) return config.ytDlpCookiesFile
+    if (!config.ytDlpCookiesB64) return null
+    if (cachedCookiesPath) return cachedCookiesPath
+
+    const raw = Buffer.from(config.ytDlpCookiesB64, 'base64').toString('utf8').trim()
+    if (!raw) return null
+    const target = path.join(os.tmpdir(), 'soultrack-yt-cookies.txt')
+    await fs.writeFile(target, `${raw}\n`, { encoding: 'utf8', mode: 0o600 })
+    cachedCookiesPath = target
+    return target
+  }
+
   async function runBin(bin, args, timeoutMs = 120_000) {
     return execFileAsync(bin, args, { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 })
+  }
+
+  async function runYtDlp(args, timeoutMs) {
+    const baseArgs = ['--no-playlist', '--no-warnings', '--force-ipv4']
+    if (config.ytDlpJsRuntime) {
+      baseArgs.push('--js-runtimes', config.ytDlpJsRuntime, '--remote-components', 'ejs:github')
+    }
+    const cookiesPath = await resolveCookiesPath()
+    if (cookiesPath) baseArgs.push('--cookies', cookiesPath)
+    if (config.ytDlpProxy) baseArgs.push('--proxy', config.ytDlpProxy)
+    return runBin(config.ytDlpBin, [...baseArgs, ...args], timeoutMs)
   }
 
   return {
     async fetchYoutubeInfo(canonicalUrl) {
       try {
-        const { stdout } = await runBin(config.ytDlpBin, [
+        const { stdout } = await runYtDlp([
           '--dump-single-json',
-          '--no-playlist',
-          '--no-warnings',
           canonicalUrl,
-        ], 45_000)
+        ], 60_000)
         const info = JSON.parse(stdout)
         const ytmArtists = Array.isArray(info.artists) && info.artists.length
           ? info.artists.filter(Boolean).join(', ')
@@ -52,10 +81,8 @@ export function createMediaTools(config) {
     async downloadYoutubeAudio(canonicalUrl, outDir) {
       const template = path.join(outDir, 'source.%(ext)s')
       try {
-        await runBin(config.ytDlpBin, [
+        await runYtDlp([
           '-f', 'bestaudio/best',
-          '--no-playlist',
-          '--no-warnings',
           '-o', template,
           canonicalUrl,
         ], 180_000)
