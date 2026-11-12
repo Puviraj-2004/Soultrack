@@ -1,6 +1,7 @@
 package com.soultrack.app.player
 
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -44,7 +45,7 @@ class SoultrackPlaybackService : MediaSessionService() {
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
 
         val launchIntent = Intent(this, MainActivity::class.java)
@@ -65,10 +66,13 @@ class SoultrackPlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaSession?.player
-        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
-            stopSelf()
+        mediaSession?.player?.let { player ->
+            player.playWhenReady = false
+            player.stop()
+            player.clearMediaItems()
         }
+        stopForeground(Service.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
