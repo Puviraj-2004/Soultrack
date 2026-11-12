@@ -75,6 +75,13 @@ body {
   font-size: 1.15rem;
   font-weight: 800;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.brand-mark-img {
+  display: block;
+  object-fit: cover;
+  background: transparent;
 }
 
 .brand h1 {

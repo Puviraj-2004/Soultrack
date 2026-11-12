@@ -48,15 +48,14 @@ Open `http://localhost:3000` in your browser to sign into the Admin Panel using 
 
 ## Part 2: `soultrack-mobile` Setup (Android Kotlin)
 
-Open `soultrack-mobile/` in **Android Studio**, or build from PowerShell:
+Open `soultrack-mobile/` in **Android Studio**, or build from PowerShell using JDK 17 (Gradle 8.13 does not support Java 25):
 ```powershell
 cd soultrack-mobile
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot"
 .\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-To bake your Render server URL into the APK at build time:
+Release builds default to the deployed Render server (`https://soultrack-u6xm.onrender.com`) and hide developer server settings. Override the URL at build time if needed:
 ```powershell
 .\gradlew.bat assembleRelease -PSOULTRACK_SERVER_URL=https://your-service.onrender.com
 ```
-You can also change the server URL anytime inside the app under the **Settings** tab.

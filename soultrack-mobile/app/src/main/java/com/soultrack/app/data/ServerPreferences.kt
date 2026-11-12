@@ -8,6 +8,9 @@ class ServerPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("soultrack_prefs", Context.MODE_PRIVATE)
 
     fun getServerUrl(): String {
+        if (!BuildConfig.DEBUG) {
+            return normalizeServerUrl(BuildConfig.DEFAULT_SERVER_URL)
+        }
         val saved = prefs.getString(KEY_SERVER_URL, null)
         return normalizeServerUrl(saved ?: BuildConfig.DEFAULT_SERVER_URL)
     }

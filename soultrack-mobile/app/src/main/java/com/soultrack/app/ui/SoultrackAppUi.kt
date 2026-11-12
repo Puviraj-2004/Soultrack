@@ -525,7 +525,11 @@ private fun HomeScreen(
                     ) {
                         EmptyOrErrorCard(
                             title = "Could not load Soultrack",
-                            subtitle = "${state.errorMessage}\nServer: ${state.serverUrl}",
+                            subtitle = if (BuildConfig.DEBUG) {
+                                "${state.errorMessage}\nServer: ${state.serverUrl}"
+                            } else {
+                                "${state.errorMessage}\nPlease check your internet connection and try again."
+                            },
                             actionLabel = "Retry",
                             onAction = onRefresh
                         )
@@ -1524,7 +1528,7 @@ private fun SettingsScreen(
     onCheckUpdates: () -> Unit
 ) {
     var draftUrl by remember(serverUrl) { mutableStateOf(serverUrl) }
-    var showServerEditor by rememberSaveable { mutableStateOf(BuildConfig.DEBUG) }
+    var showServerEditor by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -1584,50 +1588,50 @@ private fun SettingsScreen(
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Soultrack Server", fontWeight = FontWeight.Bold)
-                    if (!BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Developer Server", fontWeight = FontWeight.Bold)
                         TextButton(onClick = { showServerEditor = !showServerEditor }) {
-                            Text(if (showServerEditor) "Hide" else "Advanced Server Settings")
+                            Text(if (showServerEditor) "Hide" else "Change")
                         }
                     }
-                }
-                if (showServerEditor) {
-                    Text(
-                        "Render (https://...), USB debug (http://127.0.0.1:3000), or emulator (http://10.0.2.2:3000).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = draftUrl,
-                        onValueChange = { draftUrl = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Button(
-                        onClick = { onSaveServerUrl(draftUrl) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Save & Reconnect")
+                    if (showServerEditor) {
+                        Text(
+                            "Render (https://...), USB debug (http://127.0.0.1:3000), or emulator (http://10.0.2.2:3000).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = draftUrl,
+                            onValueChange = { draftUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Button(
+                            onClick = { onSaveServerUrl(draftUrl) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Save & Reconnect")
+                        }
+                    } else {
+                        Text(
+                            text = "Connected: $serverUrl",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                } else {
-                    Text(
-                        text = "Connected: $serverUrl",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -1640,9 +1644,9 @@ private fun SettingsScreen(
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("App Version", fontWeight = FontWeight.Bold)
+                Text("About & Updates", fontWeight = FontWeight.Bold)
                 Text(
-                    "Installed: v${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE})",
+                    "Soultrack v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

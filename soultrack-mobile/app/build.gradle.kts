@@ -28,6 +28,8 @@ android {
 
         // Override at build time with -PSOULTRACK_SERVER_URL=https://your-render-app.onrender.com
         val defaultServerUrl = (project.findProperty("SOULTRACK_SERVER_URL") as String?)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
             ?: "http://10.0.2.2:3000"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$defaultServerUrl\"")
     }
@@ -45,6 +47,11 @@ android {
 
     buildTypes {
         release {
+            val releaseServerUrl = (project.findProperty("SOULTRACK_SERVER_URL") as String?)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: "https://soultrack-u6xm.onrender.com"
+            buildConfigField("String", "DEFAULT_SERVER_URL", "\"$releaseServerUrl\"")
             isMinifyEnabled = true
             isShrinkResources = true
             if (keystorePropsFile.exists()) {
