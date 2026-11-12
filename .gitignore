@@ -1,26 +1,33 @@
-# Logs
-logs
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+soultrack-server/.env
+soultrack-server/.env.*
+!soultrack-server/.env.example
+
+# Node / Server
+node_modules/
+logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+soultrack-server/uploads/
 
-node_modules
-dist
-dist-ssr
-*.local
+# Android / Gradle / Kotlin
+soultrack-mobile/.gradle/
+soultrack-mobile/local.properties
+soultrack-mobile/keystore.properties
+**/build/
+*.iml
+.idea/
+.cxx/
+captures/
+*.apk
+*.aab
+*.jks
+*.keystore
 
-.env
-
-# Editor directories and files
+# OS & Editors
+.DS_Store
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?

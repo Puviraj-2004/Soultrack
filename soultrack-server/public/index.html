@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Soultrack Admin</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header id="admin-topbar" class="topbar" hidden>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">♪</span>
+        <div>
+          <h1>Soultrack Admin</h1>
+          <p class="subtitle">Catalog, Ingestion &amp; Releases</p>
+        </div>
+      </div>
+      <div id="topbar-actions" class="topbar-actions">
+        <span id="worker-badge" class="badge badge-neutral">Worker idle</span>
+        <button id="sign-out-btn" type="button" class="btn btn-ghost btn-sm">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Full-screen Login Page -->
+    <section id="login-view" class="login-page" aria-labelledby="login-heading">
+      <div class="card login-card">
+        <div class="login-brand">
+          <span class="brand-mark brand-mark-lg" aria-hidden="true">♪</span>
+          <h1 id="login-heading">Soultrack Admin</h1>
+          <p class="hint">Sign in to manage songs, playlists &amp; app updates.</p>
+        </div>
+        <form id="login-form" novalidate>
+          <div class="field">
+            <label for="admin-secret">Password <span aria-hidden="true">*</span></label>
+            <div class="password-row">
+              <input
+                id="admin-secret"
+                name="secret"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Enter admin password"
+                required
+                aria-invalid="false"
+                data-error="login-secret-error"
+              />
+              <button id="toggle-secret-btn" type="button" class="btn btn-ghost" aria-pressed="false">Show</button>
+            </div>
+            <div id="login-secret-error" class="error-msg">Please enter your password.</div>
+          </div>
+          <p id="login-server-error" class="server-error" role="status" aria-live="polite" hidden></p>
+          <button id="login-submit-btn" type="submit" class="btn btn-primary btn-full">Sign in</button>
+        </form>
+      </div>
+    </section>
+
+    <main id="dashboard-main" class="container" hidden>
+      <!-- Authenticated Dashboard -->
+      <div id="dashboard-view" class="dashboard">
+        <!-- Quick Actions Toolbar -->
+        <section class="action-grid" aria-label="Quick actions">
+          <button id="open-yt-btn" type="button" class="action-tile action-tile-primary">
+            <span class="action-icon" aria-hidden="true">▶</span>
+            <span>Import YouTube</span>
+          </button>
+          <button id="open-upload-btn" type="button" class="action-tile">
+            <span class="action-icon" aria-hidden="true">↑</span>
+            <span>Upload Audio</span>
+          </button>
+          <button id="new-playlist-btn" type="button" class="action-tile">
+            <span class="action-icon" aria-hidden="true">＋</span>
+            <span>New Playlist</span>
+          </button>
+          <button id="open-release-btn" type="button" class="action-tile">
+            <span class="action-icon" aria-hidden="true">★</span>
+            <span>APK Release</span>
+          </button>
+        </section>
+
+        <!-- Segmented View Switcher -->
+        <nav class="view-tabs" role="tablist" aria-label="Catalog sections">
+          <button id="tab-songs" type="button" role="tab" aria-selected="true" class="view-tab active" data-view="songs">
+            Songs (<span id="songs-tab-count">0</span>)
+          </button>
+          <button id="tab-playlists" type="button" role="tab" aria-selected="false" class="view-tab" data-view="playlists">
+            Playlists (<span id="playlists-tab-count">0</span>)
+          </button>
+        </nav>
+
+        <!-- Songs Panel (Paginated & Mobile-Responsive) -->
+        <section id="songs-panel" class="card" aria-labelledby="songs-heading">
+          <div class="section-header">
+            <h2 id="songs-heading">Catalog (<span id="songs-count">0</span>)</h2>
+            <button id="enrich-all-btn" type="button" class="btn btn-ghost btn-sm">Auto-Fill Metadata</button>
+          </div>
+
+          <div class="songs-toolbar">
+            <search class="search-box">
+              <label for="song-search" class="visually-hidden">Search songs</label>
+              <input
+                id="song-search"
+                type="search"
+                placeholder="Search song, artist, mood, album, tag..."
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+              />
+            </search>
+            <div class="filter-pills" role="group" aria-label="Filter by status">
+              <button type="button" class="filter-pill active" data-status-filter="ALL">All</button>
+              <button type="button" class="filter-pill" data-status-filter="READY">Ready</button>
+              <button type="button" class="filter-pill" data-status-filter="PROCESSING">Processing</button>
+              <button type="button" class="filter-pill" data-status-filter="FAILED">Failed</button>
+            </div>
+          </div>
+
+          <div id="songs-list" class="songs-list"></div>
+
+          <div id="songs-pagination" class="pagination-bar" hidden>
+            <button id="songs-prev-btn" type="button" class="btn btn-ghost btn-sm">Prev</button>
+            <span id="songs-page-info" class="page-info">Page 1 of 1</span>
+            <button id="songs-next-btn" type="button" class="btn btn-ghost btn-sm">Next</button>
+          </div>
+        </section>
+
+        <!-- Playlists Panel -->
+        <section id="playlists-panel" class="card" aria-labelledby="playlists-heading" hidden>
+          <div class="section-header">
+            <h2 id="playlists-heading">Playlists (<span id="playlists-count">0</span>)</h2>
+          </div>
+          <div id="playlists-list" class="playlists-list"></div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Popup: Import from YouTube -->
+    <dialog id="yt-dialog" closedby="any" aria-labelledby="yt-heading">
+      <form id="ingest-form" class="dialog-body" novalidate>
+        <div class="dialog-head">
+          <h3 id="yt-heading">Import from YouTube</h3>
+          <button type="button" class="btn-icon" data-close-dialog="yt-dialog" aria-label="Close">✕</button>
+        </div>
+        <p class="hint">Paste a YouTube or YouTube Music URL — metadata auto-fills before download.</p>
+        <div class="field">
+          <label for="yt-url">YouTube video URL <span aria-hidden="true">*</span></label>
+          <div class="url-preview-row">
+            <input
+              id="yt-url"
+              name="url"
+              type="url"
+              required
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              placeholder="https://www.youtube.com/watch?v=..."
+              aria-invalid="false"
+              data-error="yt-url-error"
+            />
+            <button id="yt-preview-btn" type="button" class="btn btn-ghost">Fetch Info</button>
+          </div>
+          <div id="yt-url-error" class="error-msg">Enter a valid http(s) YouTube URL.</div>
+        </div>
+
+        <div id="yt-preview-panel" class="yt-preview-box" hidden>
+          <div class="yt-preview-head">
+            <img id="yt-preview-thumb" class="yt-preview-thumb" alt="" hidden />
+            <div class="yt-preview-meta">
+              <div class="yt-preview-label">Preview &amp; Auto-Fill</div>
+              <div id="yt-preview-duration" class="yt-preview-sub">Review before importing</div>
+            </div>
+          </div>
+          <div class="grid-two-compact">
+            <div class="field">
+              <label for="yt-title">Clean Title</label>
+              <input id="yt-title" name="title" type="text" maxlength="200" />
+            </div>
+            <div class="field">
+              <label for="yt-artist">Artist (Composer, Singers)</label>
+              <input id="yt-artist" name="artist" type="text" maxlength="200" placeholder="Anirudh, Jonita Gandhi" />
+            </div>
+          </div>
+          <div class="grid-two-compact">
+            <div class="field">
+              <label for="yt-genre">Genre</label>
+              <select id="yt-genre" name="genre" data-preset="genre"></select>
+            </div>
+            <div class="field">
+              <label for="yt-mood">Mood</label>
+              <select id="yt-mood" name="mood" data-preset="mood"></select>
+            </div>
+          </div>
+          <div class="grid-two-compact">
+            <div class="field">
+              <label for="yt-language">Language</label>
+              <select id="yt-language" name="language" data-preset="language"></select>
+            </div>
+            <div class="field">
+              <label for="yt-album">Album / Movie</label>
+              <input id="yt-album" name="album" type="text" maxlength="140" />
+            </div>
+          </div>
+          <div class="field" style="margin-block-end:0">
+            <label for="yt-tags">Tags (tap chips or type comma separated)</label>
+            <input id="yt-tags" name="tags" type="text" placeholder="90s, evergreen, duet" />
+            <div class="tag-chips" data-tag-target="yt-tags"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="yt-playlist">Add to playlist (optional)</label>
+          <select id="yt-playlist" name="playlistId">
+            <option value="">Library only</option>
+          </select>
+        </div>
+        <p id="ingest-status" class="status-msg" role="status" aria-live="polite" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close-dialog="yt-dialog">Cancel</button>
+          <button id="ingest-submit-btn" type="submit" class="btn btn-primary">Queue Import</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Popup: Upload Audio File -->
+    <dialog id="upload-dialog" closedby="any" aria-labelledby="upload-heading">
+      <form id="upload-form" class="dialog-body" novalidate>
+        <div class="dialog-head">
+          <h3 id="upload-heading">Upload Audio File</h3>
+          <button type="button" class="btn-icon" data-close-dialog="upload-dialog" aria-label="Close">✕</button>
+        </div>
+        <p class="hint">Direct upload to Cloudflare R2 (MP3, M4A, WAV, FLAC, OGG).</p>
+        <div class="field">
+          <label for="audio-file">Audio file <span aria-hidden="true">*</span></label>
+          <input id="audio-file" name="audio" type="file" accept="audio/*" required aria-invalid="false" data-error="audio-file-error" />
+          <div id="audio-file-error" class="error-msg">Choose an audio file to upload.</div>
+        </div>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="upload-title">Title (auto if blank)</label>
+            <input id="upload-title" name="title" type="text" maxlength="200" />
+          </div>
+          <div class="field">
+            <label for="upload-artist">Artist (auto if blank)</label>
+            <input id="upload-artist" name="artist" type="text" maxlength="200" />
+          </div>
+        </div>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="upload-thumb">Cover image (optional)</label>
+            <input id="upload-thumb" name="thumbnail" type="file" accept="image/*" />
+          </div>
+          <div class="field">
+            <label for="upload-playlist">Add to playlist (optional)</label>
+            <select id="upload-playlist" name="playlistId">
+              <option value="">Library only</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="upload-genre">Genre</label>
+            <select id="upload-genre" name="genre" data-preset="genre"></select>
+          </div>
+          <div class="field">
+            <label for="upload-mood">Mood</label>
+            <select id="upload-mood" name="mood" data-preset="mood"></select>
+          </div>
+        </div>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="upload-language">Language</label>
+            <select id="upload-language" name="language" data-preset="language"></select>
+          </div>
+          <div class="field">
+            <label for="upload-album">Album / Movie</label>
+            <input id="upload-album" name="album" type="text" maxlength="140" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="upload-tags">Tags</label>
+          <input id="upload-tags" name="tags" type="text" placeholder="lofi, chill, night" />
+          <div class="tag-chips" data-tag-target="upload-tags"></div>
+        </div>
+        <div id="upload-progress-wrap" class="progress-wrap" hidden>
+          <progress id="upload-progress" max="100" value="0"></progress>
+          <span id="upload-progress-label">0%</span>
+        </div>
+        <p id="upload-status" class="status-msg" role="status" aria-live="polite" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close-dialog="upload-dialog">Cancel</button>
+          <button id="upload-submit-btn" type="submit" class="btn btn-primary">Upload Song</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Popup: Android APK Release -->
+    <dialog id="release-dialog" closedby="any" aria-labelledby="release-heading">
+      <form id="release-form" class="dialog-body" novalidate>
+        <div class="dialog-head">
+          <h3 id="release-heading">Android APK Release</h3>
+          <button type="button" class="btn-icon" data-close-dialog="release-dialog" aria-label="Close">✕</button>
+        </div>
+        <p class="hint">The Kotlin app calls <code>GET /api/version</code> on startup and prompts users when <code>versionCode</code> increases.</p>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="rel-code">Version code <span aria-hidden="true">*</span></label>
+            <input id="rel-code" name="versionCode" type="text" inputmode="numeric" pattern="[0-9]+" required aria-invalid="false" data-error="rel-code-error" />
+            <div id="rel-code-error" class="error-msg">Enter a positive integer (e.g. 2).</div>
+          </div>
+          <div class="field">
+            <label for="rel-name">Version name <span aria-hidden="true">*</span></label>
+            <input id="rel-name" name="versionName" type="text" required placeholder="1.0.1" aria-invalid="false" data-error="rel-name-error" />
+            <div id="rel-name-error" class="error-msg">Enter a version name like 1.0.1.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rel-url">APK Download URL <span aria-hidden="true">*</span></label>
+          <input
+            id="rel-url"
+            name="downloadUrl"
+            type="url"
+            required
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+            placeholder="https://github.com/.../soultrack-v1.0.1.apk"
+            aria-invalid="false"
+            data-error="rel-url-error"
+          />
+          <div id="rel-url-error" class="error-msg">Enter a valid http(s) APK URL.</div>
+        </div>
+        <div class="field">
+          <label for="rel-notes">Release notes</label>
+          <textarea id="rel-notes" name="releaseNotes" rows="2" placeholder="What changed in this build?"></textarea>
+        </div>
+        <div class="checkbox-field">
+          <input id="rel-force" name="forceUpdate" type="checkbox" />
+          <label for="rel-force">Force update (hide "Later" button in app)</label>
+        </div>
+        <p id="release-status" class="status-msg" role="status" aria-live="polite" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close-dialog="release-dialog">Cancel</button>
+          <button id="release-submit-btn" type="submit" class="btn btn-primary">Save Release Info</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Popup: Edit Song -->
+    <dialog id="edit-song-dialog" closedby="any" aria-labelledby="edit-song-title-h">
+      <form id="edit-song-form" class="dialog-body" novalidate>
+        <div class="dialog-head">
+          <h3 id="edit-song-title-h">Edit Song</h3>
+          <button type="button" class="btn-icon" data-close-dialog="edit-song-dialog" aria-label="Close">✕</button>
+        </div>
+        <input id="edit-song-id" type="hidden" />
+        <div class="field">
+          <label for="edit-song-title">Title <span aria-hidden="true">*</span></label>
+          <input id="edit-song-title" type="text" required autofocus aria-invalid="false" data-error="edit-song-title-error" />
+          <div id="edit-song-title-error" class="error-msg">Title is required.</div>
+        </div>
+        <div class="field">
+          <label for="edit-song-artist">Artist</label>
+          <input id="edit-song-artist" type="text" />
+        </div>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="edit-song-genre">Genre</label>
+            <select id="edit-song-genre" data-preset="genre"></select>
+          </div>
+          <div class="field">
+            <label for="edit-song-mood">Mood</label>
+            <select id="edit-song-mood" data-preset="mood"></select>
+          </div>
+        </div>
+        <div class="grid-two-compact">
+          <div class="field">
+            <label for="edit-song-language">Language</label>
+            <select id="edit-song-language" data-preset="language"></select>
+          </div>
+          <div class="field">
+            <label for="edit-song-album">Album</label>
+            <input id="edit-song-album" type="text" maxlength="140" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="edit-song-tags">Tags (comma separated)</label>
+          <input id="edit-song-tags" type="text" placeholder="lofi, chill, night" />
+          <div class="tag-chips" data-tag-target="edit-song-tags"></div>
+        </div>
+        <div class="field">
+          <label for="edit-song-thumb">Cover image URL</label>
+          <input id="edit-song-thumb" type="url" autocorrect="off" autocapitalize="none" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="edit-song-playlist">Quick add to playlist</label>
+          <select id="edit-song-playlist">
+            <option value="">Keep current playlists</option>
+          </select>
+        </div>
+        <p id="edit-song-error" class="server-error" role="status" aria-live="polite" hidden></p>
+        <div class="dialog-actions">
+          <button id="edit-song-detect-btn" type="button" class="btn btn-ghost">Auto-Detect</button>
+          <button type="button" class="btn btn-ghost" data-close-dialog="edit-song-dialog">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Popup: Playlist Create/Edit -->
+    <dialog id="playlist-dialog" closedby="any" aria-labelledby="playlist-dialog-title">
+      <form id="playlist-form" class="dialog-body" novalidate>
+        <div class="dialog-head">
+          <h3 id="playlist-dialog-title">New Playlist</h3>
+          <button type="button" class="btn-icon" data-close-dialog="playlist-dialog" aria-label="Close">✕</button>
+        </div>
+        <input id="playlist-id" type="hidden" />
+        <div class="field">
+          <label for="playlist-name">Name <span aria-hidden="true">*</span></label>
+          <input id="playlist-name" type="text" required maxlength="120" autofocus aria-invalid="false" data-error="playlist-name-error" />
+          <div id="playlist-name-error" class="error-msg">Playlist name is required.</div>
+        </div>
+        <div class="field">
+          <label for="playlist-desc">Description</label>
+          <input id="playlist-desc" type="text" maxlength="240" />
+        </div>
+        <div class="field">
+          <label for="playlist-color">Cover color</label>
+          <input id="playlist-color" type="color" value="#0096FF" />
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close-dialog="playlist-dialog">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Playlist</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Popup: Playlist Songs -->
+    <dialog id="playlist-songs-dialog" closedby="any" aria-labelledby="playlist-songs-title">
+      <div class="dialog-body">
+        <div class="dialog-head">
+          <h3 id="playlist-songs-title">Playlist Songs</h3>
+          <button type="button" class="btn-icon" data-close-dialog="playlist-songs-dialog" aria-label="Close">✕</button>
+        </div>
+        <div id="playlist-songs-list" class="playlists-list"></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close-dialog="playlist-songs-dialog" autofocus>Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Popup: Confirm Delete -->
+    <dialog id="confirm-delete-dialog" closedby="any" aria-labelledby="confirm-delete-title">
+      <form method="dialog" class="dialog-body">
+        <h3 id="confirm-delete-title">Delete Song?</h3>
+        <p id="confirm-delete-desc" class="hint"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="btn btn-ghost" autofocus>Cancel</button>
+          <button value="confirm" class="btn btn-danger">Delete</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Popup: Confirm Sign Out -->
+    <dialog id="confirm-logout-dialog" closedby="any" aria-labelledby="confirm-logout-title">
+      <form method="dialog" class="dialog-body">
+        <h3 id="confirm-logout-title">Sign Out?</h3>
+        <p class="hint">You will need to enter the admin password again to manage the catalog.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="btn btn-ghost" autofocus>Cancel</button>
+          <button value="confirm" class="btn btn-danger">Sign out</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
