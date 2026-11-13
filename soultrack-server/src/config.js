@@ -53,6 +53,7 @@ export function loadConfig(env = process.env) {
     ffmpegBin: (env.FFMPEG_BIN || 'ffmpeg').trim(),
     ffprobeBin: (env.FFPROBE_BIN || 'ffprobe').trim(),
     geminiApiKey: (env.GEMINI_API_KEY || '').trim(),
+    geminiModel: (env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim(),
     defaultAppRelease: {
       versionCode: Number(env.APP_LATEST_VERSION_CODE) || 1,
       versionName: env.APP_LATEST_VERSION_NAME || '1.0.0',

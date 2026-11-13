@@ -227,26 +227,48 @@ export function createMediaTools(config) {
           `Description excerpt: ${String(description || '').slice(0, 1200)}`,
         ].join('\n')
 
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(config.geminiApiKey)}`
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: 'application/json',
-            },
-          }),
-          signal: AbortSignal.timeout(7_000),
-        })
-        if (!res.ok) return null
-        const json = await res.json()
-        const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (!rawText) return null
-        const parsed = JSON.parse(rawText)
-        return parsed && typeof parsed === 'object' ? parsed : null
-      } catch {
+        const candidateModels = [
+          config.geminiModel,
+          'gemini-3.5-flash-lite',
+          'gemini-3.5-flash',
+        ].filter(Boolean)
+
+        const uniqueModels = [...new Set(candidateModels)]
+
+        for (const model of uniqueModels) {
+          try {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(config.geminiApiKey)}`
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.1,
+                  responseMimeType: 'application/json',
+                },
+              }),
+              signal: AbortSignal.timeout(7_000),
+            })
+            if (!res.ok) {
+              const errBody = await res.text().catch(() => '')
+              console.warn(`[gemini] Model ${model} returned HTTP ${res.status}: ${errBody.slice(0, 160)}`)
+              continue
+            }
+            const json = await res.json()
+            const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text
+            if (!rawText) continue
+            const parsed = JSON.parse(rawText)
+            if (parsed && typeof parsed === 'object') {
+              return parsed
+            }
+          } catch (modelErr) {
+            console.warn(`[gemini] Model ${model} failed: ${modelErr.message}`)
+          }
+        }
+        return null
+      } catch (err) {
+        console.warn(`[gemini] extractAiMetadata failed: ${err.message}`)
         return null
       }
     },
