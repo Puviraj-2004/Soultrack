@@ -6,7 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createApp } from '../src/app.js'
 import { loadConfig } from '../src/config.js'
-import { inferSongMetadata } from '../src/metadata.js'
+import { enrichSongWithMetadata, inferSongMetadata, isRecordLabelChannel } from '../src/metadata.js'
 import { createIngestionWorker } from '../src/worker.js'
 
 function createInMemoryRepo() {
@@ -517,4 +517,33 @@ test('inferSongMetadata derives genre, mood, language, and normalized tags', () 
   assert.ok(youtubeLabelCase.tags.includes('90s'))
   assert.ok(youtubeLabelCase.genre)
   assert.ok(youtubeLabelCase.mood)
+})
+
+test('enrichSongWithMetadata prioritizes AI composer/singers and ignores channel names like Gemini Audio', async () => {
+  assert.equal(isRecordLabelChannel('Gemini Audio'), true)
+  assert.equal(isRecordLabelChannel('Five Star Audio'), true)
+  assert.equal(isRecordLabelChannel('Sony Music South'), true)
+  assert.equal(isRecordLabelChannel('Vijay Antony'), false)
+
+  const enriched = await enrichSongWithMetadata({
+    title: 'Naan Movie Video Songs | Thapellam Thappe Illai | Vijay Antony',
+    artist: 'Gemini Audio',
+    genre: 'People & Blogs',
+    extractWithAi: async () => ({
+      title: 'Thapellam Thappe Illai',
+      artist: 'Vijay Antony',
+      album: 'Naan',
+      genre: 'Melody',
+      mood: 'Feel Good',
+      language: 'Tamil',
+      tags: ['2010s', 'tamil', 'vijay antony'],
+    }),
+  })
+
+  assert.equal(enriched.title, 'Thapellam Thappe Illai')
+  assert.equal(enriched.artist, 'Vijay Antony')
+  assert.equal(enriched.album, 'Naan')
+  assert.equal(enriched.genre, 'Melody')
+  assert.equal(enriched.mood, 'Feel Good')
+  assert.equal(enriched.language, 'Tamil')
 })

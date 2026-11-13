@@ -67,6 +67,10 @@ const RECORD_LABEL_PATTERNS = [
   /\b-\s*topic\b/i,
   /\bofficial channel\b/i,
   /\bunknown artist\b/i,
+  /\bgemini (?:audio|music)\b/i,
+  /\b(?:audio|audios|records|recordings|jukebox|cassettes?|studios?|productions?)\b/i,
+  /\b(?:music|media)\s*(?:south|india|tamil|telugu|malayalam|kannada|hindi|official|company|hub|world)?\b/i,
+  /\b(ayngaran|divo|pyramid|ap international|five star|speed audio|ananda audio|trendmusic|trend music|noise and grains|mass audios?|satyam audios?|millennium audios?)\b/i,
 ]
 
 const KNOWN_ARTIST_REGEX = /\b(a\.?\s*r\.?\s*rahman|anirudh(?:\s+ravichander)?|yuvan(?:\s+shankar\s+raja)?|ilaiyaraaja|harris jayaraj|g\.?\s*v\.?\s*prakash(?:\s+kumar)?|santhosh narayanan|vidyasagar|deva|d\.?\s*imman|hiphop tamizha|s\.?\s*a\.?\s*rajkumar|sa rajkumar|s\.?\s*p\.?\s*balasubrahmanyam|spb|shreya ghoshal|arijit singh|pritam|devi sri prasad|s\.?\s*thaman|sid sriram|pradeep kumar|shakthisree gopalan|chinmayi|s\.?\s*janaki|k\.?\s*s\.?\s*chithra|chitra|swarnalatha|harish raghavendra|karthik|unnikrishnan|sonu nigam|udit narayan|alka yagnik|kumar sanu|vishal mishra|atif aslam|k\.?\s*j\.?\s*yesudas|yesudas|sujatha)\b/i
@@ -345,12 +349,30 @@ function detectLanguage(haystack, explicitLanguage) {
   return ''
 }
 
+export function isGenericCategory(genreStr) {
+  const lower = String(genreStr || '').trim().toLowerCase()
+  return (
+    !lower ||
+    lower === 'music' ||
+    lower === 'entertainment' ||
+    lower === 'people & blogs' ||
+    lower === 'film & animation' ||
+    lower === 'news & politics' ||
+    lower === 'comedy' ||
+    lower === 'education' ||
+    lower === 'how-to & style' ||
+    lower === 'gaming' ||
+    lower === 'indian' ||
+    lower === 'tamil'
+  )
+}
+
 function normalizeKnownGenre(rawGenre, fallbackHaystack) {
   const cleaned = cleanText(rawGenre, 80)
   if (!cleaned) return matchRule(GENRE_RULES, fallbackHaystack)
   const lower = cleaned.toLowerCase()
   const mapped = matchRule(GENRE_RULES, `${lower} ${fallbackHaystack}`)
-  if (lower === 'music' || lower === 'entertainment' || lower === 'people & blogs' || lower === 'film & animation' || lower === 'indian' || lower === 'tamil') {
+  if (isGenericCategory(lower)) {
     return mapped || 'Melody'
   }
   return cleaned
@@ -438,8 +460,9 @@ export async function enrichSongWithMetadata({
 } = {}) {
   const parsed = parseYoutubeTitleMetadata(title, artist, description)
   let itunes = null
+  const hasRealGenre = Boolean(genre && !isGenericCategory(genre))
   const needsArtist = isRecordLabelChannel(parsed.artist || artist)
-  const needsAlbumOrGenre = !album || !parsed.album || !genre
+  const needsAlbumOrGenre = !album || !parsed.album || !hasRealGenre
 
   if (typeof lookupItunes === 'function' && (needsArtist || needsAlbumOrGenre)) {
     const queryParts = [parsed.cleanSongQuery, parsed.album].filter(Boolean)
@@ -454,10 +477,12 @@ export async function enrichSongWithMetadata({
   }
 
   let aiMeta = null
-  const stillNeedsHelp = isRecordLabelChannel(itunes?.artist || parsed.artist || artist) ||
+  const stillNeedsHelp =
+    isRecordLabelChannel(itunes?.artist || parsed.artist || artist) ||
     (!album && !itunes?.album && !parsed.album) ||
-    !genre ||
+    !hasRealGenre ||
     !mood
+
   if (typeof extractWithAi === 'function' && stillNeedsHelp) {
     try {
       aiMeta = await extractWithAi({
@@ -471,21 +496,59 @@ export async function enrichSongWithMetadata({
     }
   }
 
-  const resolvedArtist = !isRecordLabelChannel(artist)
-    ? cleanText(artist, 200)
-    : (
-        (!isRecordLabelChannel(aiMeta?.artist) && cleanText(aiMeta?.artist, 200)) ||
-        (!isRecordLabelChannel(itunes?.artist) && cleanText(itunes?.artist, 200)) ||
-        parsed.artist ||
-        cleanText(artist, 200)
-      )
+  const cleanAiArtist = !isRecordLabelChannel(aiMeta?.artist) ? cleanText(aiMeta?.artist, 200) : ''
+  const cleanItunesArtist = !isRecordLabelChannel(itunes?.artist) ? cleanText(itunes?.artist, 200) : ''
+  const cleanParsedArtist = !isRecordLabelChannel(parsed.artist) ? cleanText(parsed.artist, 200) : ''
+  const cleanPassedArtist = !isRecordLabelChannel(artist) ? cleanText(artist, 200) : ''
+
+  // Prioritize real composer/singer:
+  // 1. AI artist (composer/singers identified by Gemini)
+  // 2. iTunes artist (official catalog artist)
+  // 3. Parsed artist from video title/description
+  // 4. Passed artist (if not a channel or record label)
+  // 5. Fallback: whatever artist was passed
+  const resolvedArtist =
+    cleanAiArtist ||
+    cleanItunesArtist ||
+    cleanParsedArtist ||
+    cleanPassedArtist ||
+    cleanText(artist, 200)
+
+  // Prioritize musical genres over generic YouTube categories (like "People & Blogs" or "Music"):
+  const cleanExplicitGenre = !isGenericCategory(genre) ? cleanText(genre, 80) : ''
+  const cleanAiGenre = !isGenericCategory(aiMeta?.genre) ? cleanText(aiMeta?.genre, 80) : ''
+  const cleanItunesGenre = !isGenericCategory(itunes?.genre) ? cleanText(itunes?.genre, 80) : ''
+  const resolvedGenreInput =
+    cleanExplicitGenre ||
+    cleanAiGenre ||
+    cleanItunesGenre ||
+    cleanText(genre, 80)
+
+  const cleanExplicitMood = cleanText(mood, 80)
+  const cleanAiMood = cleanText(aiMeta?.mood, 80)
+  const resolvedMoodInput = cleanExplicitMood || cleanAiMood
+
+  const cleanExplicitAlbum = cleanText(album, 140)
+  const cleanAiAlbum = cleanText(aiMeta?.album, 140)
+  const cleanItunesAlbum = cleanText(itunes?.album, 140)
+  const cleanParsedAlbum = cleanText(parsed.album, 140)
+  const resolvedAlbumInput =
+    cleanExplicitAlbum ||
+    cleanAiAlbum ||
+    cleanItunesAlbum ||
+    cleanParsedAlbum
+
+  const cleanExplicitTitle =
+    cleanText(aiMeta?.title, 200) ||
+    parsed.cleanTitle ||
+    cleanText(title, 200)
 
   const inferred = inferSongMetadata({
-    title: cleanText(aiMeta?.title, 200) || title,
+    title: cleanExplicitTitle,
     artist: resolvedArtist,
-    album: album || cleanText(aiMeta?.album, 140) || itunes?.album || parsed.album || '',
-    genre: genre || cleanText(aiMeta?.genre, 80) || itunes?.genre || '',
-    mood: mood || cleanText(aiMeta?.mood, 80) || '',
+    album: resolvedAlbumInput,
+    genre: resolvedGenreInput,
+    mood: resolvedMoodInput,
     language: language || cleanText(aiMeta?.language, 60) || '',
     description,
     releaseYear: releaseYear || itunes?.releaseDate || parsed.year || '',
@@ -496,7 +559,7 @@ export async function enrichSongWithMetadata({
   })
 
   return {
-    title: cleanText(aiMeta?.title, 200) || parsed.cleanTitle || cleanText(title, 200),
+    title: cleanExplicitTitle,
     artist: resolvedArtist || inferred.artist,
     genre: inferred.genre,
     mood: inferred.mood,
