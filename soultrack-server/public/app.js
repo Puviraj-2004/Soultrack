@@ -695,9 +695,16 @@ function bindEvents() {
   el('tab-playlists').addEventListener('click', () => setActiveView('playlists'))
 
   el('open-yt-btn').addEventListener('click', () => {
+    el('yt-url').value = ''
+    clearYtPreview()
     setStatus(el('ingest-status'), '')
     el('yt-dialog').showModal()
     el('yt-url').focus()
+  })
+
+  el('yt-dialog').addEventListener('close', () => {
+    clearYtPreview()
+    setStatus(el('ingest-status'), '')
   })
 
   el('open-upload-btn').addEventListener('click', () => {
@@ -739,7 +746,15 @@ function bindEvents() {
     }
   })
 
+  let ytPreviewSeq = 0
+
   const clearYtPreview = () => {
+    ytPreviewSeq += 1
+    const btn = el('yt-preview-btn')
+    if (btn) {
+      btn.disabled = false
+      btn.textContent = 'Fetch Info'
+    }
     el('yt-preview-panel').hidden = true
     el('yt-preview-thumb').hidden = true
     el('yt-preview-thumb').src = ''
@@ -758,22 +773,27 @@ function bindEvents() {
   const fetchYtPreview = async () => {
     const urlVal = el('yt-url').value.trim()
     if (!urlVal) {
+      clearYtPreview()
       el('yt-url').focus()
       return
     }
+    const currentSeq = ++ytPreviewSeq
     const btn = el('yt-preview-btn')
     const status = el('ingest-status')
     setStatus(status, '')
     btn.disabled = true
     btn.textContent = 'Fetching...'
+
     try {
       const res = await api('/api/admin/ingest/preview', {
         method: 'POST',
         body: JSON.stringify({ url: urlVal }),
       })
+      if (currentSeq !== ytPreviewSeq) return
+
       if (res.duplicate) {
         clearYtPreview()
-        setStatus(status, `Already in catalog: "${res.song?.title || 'Track'}".`)
+        setStatus(status, `Already in catalog: "${res.song?.title || 'Track'}".`, true)
         return
       }
       const m = res.metadata || {}
@@ -794,15 +814,18 @@ function bindEvents() {
         thumb.hidden = true
       }
       el('yt-preview-duration').textContent = res.durationSeconds
-        ? `Duration: ${formatDuration(res.durationSeconds)} · Edit anything before importing`
-        : 'Review & adjust before importing'
+        ? `Duration: ${formatDuration(res.durationSeconds)} · Review & edit before importing`
+        : 'Review & edit before importing'
       el('yt-preview-panel').hidden = false
       el('ingest-submit-btn').textContent = 'Confirm & Import'
     } catch (err) {
+      if (currentSeq !== ytPreviewSeq) return
       setStatus(status, err.message, true)
     } finally {
-      btn.disabled = false
-      btn.textContent = 'Fetch Info'
+      if (currentSeq === ytPreviewSeq) {
+        btn.disabled = false
+        btn.textContent = 'Fetch Info'
+      }
     }
   }
 
@@ -811,7 +834,7 @@ function bindEvents() {
     setTimeout(() => {
       const val = el('yt-url').value.trim()
       if (/youtu\.?be/.test(val)) fetchYtPreview()
-    }, 30)
+    }, 40)
   })
   el('yt-url').addEventListener('input', () => {
     if (!el('yt-url').value.trim()) clearYtPreview()
@@ -846,13 +869,18 @@ function bindEvents() {
         method: 'POST',
         body: JSON.stringify(payload),
       })
+      const songTitle = res.song?.title || payload.title || 'Track'
       resetFormSafely(e.target)
       clearYtPreview()
-      setStatus(status, res.duplicate ? 'Already in catalog.' : 'Queued! Downloading and converting in background...')
+      setStatus(
+        status,
+        res.duplicate
+          ? `Already in catalog: "${songTitle}". Paste next link.`
+          : `✓ Queued "${songTitle}"! Downloading in background. Ready for next song:`,
+        Boolean(res.duplicate)
+      )
       await refreshAll()
-      if (!res.duplicate) {
-        el('yt-dialog').close()
-      }
+      el('yt-url').focus()
     } catch (err) {
       setStatus(status, err.message, true)
     } finally {

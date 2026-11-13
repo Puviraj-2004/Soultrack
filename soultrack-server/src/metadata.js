@@ -2,9 +2,9 @@ const GENRE_RULES = [
   { label: 'Lofi', patterns: ['lofi', 'lo-fi', 'slowed', 'reverb', 'chillhop'] },
   { label: 'Remix', patterns: ['remix', 'mashup', 'dj mix', 'dj', 'bass boosted', 'phonk', 'club mix'] },
   { label: 'Instrumental', patterns: ['instrumental', 'bgm', 'ost', 'soundtrack', 'theme music', 'karaoke', 'score'] },
-  { label: 'Acoustic', patterns: ['acoustic', 'unplugged', 'live session', 'piano cover', 'guitar cover'] },
+  { label: 'Acoustic', patterns: ['acoustic', 'unplugged', 'live session', 'piano cover', 'guitar cover', 'unplug'] },
   { label: 'Hip-Hop', patterns: ['hip hop', 'hip-hop', 'rap', 'trap', 'freestyle', 'cypher'] },
-  { label: 'Mass', patterns: ['mass', 'kuthu', 'item song', 'folk beat', 'dappankuthu'] },
+  { label: 'Mass', patterns: ['mass', 'kuthu', 'item song', 'folk beat', 'dappankuthu', 'gaana', 'gana', 'thara local'] },
   { label: 'Devotional', patterns: ['devotional', 'bhakti', 'mantra', 'sloka', 'kirtan', 'qawwali', 'sufi'] },
   { label: 'Classical', patterns: ['classical', 'carnatic', 'hindustani', 'raga', 'symphony'] },
   { label: 'Melody', patterns: ['melody', 'romantic', 'love song', 'kadhal', 'ishq', 'pyaar', 'duet'] },
@@ -12,11 +12,11 @@ const GENRE_RULES = [
 ]
 
 const MOOD_RULES = [
-  { label: 'Chill', patterns: ['lofi', 'lo-fi', 'slowed', 'reverb', 'chill', 'ambient', 'rain', 'sleep', 'night', 'study', 'relax', 'calm'] },
-  { label: 'Romantic', patterns: ['love', 'romantic', 'melody', 'heart', 'kadhal', 'ishq', 'pyaar', 'mohabbat', 'valentine', 'soulful'] },
-  { label: 'Emotional', patterns: ['sad', 'pain', 'broken', 'alone', 'tears', 'cry', 'miss you', 'heartbreak', 'emotional', 'lonely'] },
-  { label: 'Energetic', patterns: ['mass', 'kuthu', 'workout', 'gym', 'hype', 'trap', 'rap', 'phonk', 'fire', 'rage', 'energetic', 'beast'] },
-  { label: 'Party', patterns: ['party', 'dance', 'club', 'dj', 'remix', 'mashup', 'edm', 'festival'] },
+  { label: 'Chill', patterns: ['lofi', 'lo-fi', 'slowed', 'reverb', 'chill', 'ambient', 'rain', 'sleep', 'night', 'study', 'relax', 'calm', 'breeze', 'drive'] },
+  { label: 'Romantic', patterns: ['love', 'romantic', 'melody', 'heart', 'kadhal', 'ishq', 'pyaar', 'mohabbat', 'valentine', 'soulful', 'duet'] },
+  { label: 'Emotional', patterns: ['sad', 'pain', 'broken', 'alone', 'tears', 'cry', 'miss you', 'heartbreak', 'emotional', 'lonely', 'sogam', 'sogamaana', 'vali', 'pirivu', 'breakup', 'thaalattu', 'thalattu', 'amma'] },
+  { label: 'Energetic', patterns: ['mass', 'kuthu', 'workout', 'gym', 'hype', 'trap', 'rap', 'phonk', 'fire', 'rage', 'energetic', 'beast', 'dappankuthu', 'gaana', 'gana', 'thara local', 'verithanam', 'alappara'] },
+  { label: 'Party', patterns: ['party', 'dance', 'club', 'dj', 'remix', 'mashup', 'edm', 'festival', 'celebration'] },
   { label: 'Focus', patterns: ['instrumental', 'bgm', 'theme', 'score', 'piano', 'focus', 'coding', 'lofi'] },
   { label: 'Devotional', patterns: ['devotional', 'bhakti', 'mantra', 'sloka', 'prayer', 'god', 'sufi'] },
 ]
