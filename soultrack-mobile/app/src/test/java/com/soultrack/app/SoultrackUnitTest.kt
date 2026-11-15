@@ -403,11 +403,11 @@ class SoultrackUnitTest {
         assertEquals(6, allProjection.mostPlayedPages[1].size)
         assertEquals("s15", allProjection.mostPlayedPages.first().first().id)
 
-        // Quick picks group the capped 10 home songs into 3-row side-sliding columns
-        assertEquals(listOf(3, 3, 3, 1), allProjection.quickPickPages.map { it.size })
+        // Quick picks group the capped 9 home songs into 3-row side-sliding columns (3x3 grid)
+        assertEquals(listOf(3, 3, 3), allProjection.quickPickPages.map { it.size })
 
-        // Home & Search show at most 10 songs while preserving total count
-        assertEquals(10, allProjection.homeFilteredSongs.size)
+        // Home shows 9 songs in Quick Picks while Search shows at most 10 songs
+        assertEquals(9, allProjection.homeFilteredSongs.size)
         assertEquals(15, allProjection.homeTotalMatchingCount)
         assertEquals(10, allProjection.searchResults.size)
         assertEquals(15, allProjection.searchTotalMatchingCount)

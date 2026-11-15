@@ -57,7 +57,7 @@ class SoultrackApp : Application(), ImageLoaderFactory {
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(64L * 1024L * 1024L)
+                    .maxSizeBytes(128L * 1024L * 1024L)
                     .build()
             }
             .crossfade(160)
@@ -75,7 +75,7 @@ class SoultrackApp : Application(), ImageLoaderFactory {
             .forEach { url ->
                 val request = ImageRequest.Builder(this)
                     .data(url)
-                    .size(480, 480)
+                    .size(320, 320)
                     .scale(Scale.FIT)
                     .listener(
                         onSuccess = { _, result ->

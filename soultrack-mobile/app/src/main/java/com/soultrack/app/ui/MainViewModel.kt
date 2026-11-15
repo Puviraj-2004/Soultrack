@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +53,7 @@ internal data class ComputedLibraryProjection(
 
 internal object CatalogProjection {
     const val MAX_DISPLAY_SONGS = 10
+    const val MAX_QUICK_PICK_SONGS = 9
     private const val MAX_SPEED_DIAL_SONGS = 27
     private const val SPEED_DIAL_PAGE_SIZE = 9
     private const val QUICK_PICK_PAGE_SIZE = 3
@@ -101,8 +103,8 @@ internal object CatalogProjection {
         } else {
             homeMatches
         }
-        val homeCapped = orderedHomeMatches.take(MAX_DISPLAY_SONGS)
-        val quickPickPages = homeCapped.chunked(QUICK_PICK_PAGE_SIZE)
+        val quickPicksCapped = orderedHomeMatches.take(MAX_QUICK_PICK_SONGS)
+        val quickPickPages = quickPicksCapped.chunked(QUICK_PICK_PAGE_SIZE)
 
         val q = searchQuery.trim().lowercase()
         val tagFiltered = filterByTag(songs, likedSet, selectedSearchTag)
@@ -127,7 +129,7 @@ internal object CatalogProjection {
             homeRecentSongs = historyList.take(12),
             mostPlayedPages = pages,
             filterTags = filterTags,
-            homeFilteredSongs = homeCapped,
+            homeFilteredSongs = quickPicksCapped,
             quickPickPages = quickPickPages,
             homeTotalMatchingCount = homeMatches.size,
             searchResults = searchMatches.take(MAX_DISPLAY_SONGS),
@@ -234,6 +236,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             refreshLibrary()
             checkForUpdates(silent = true)
+            startPeriodicSync()
+        }
+    }
+
+    private fun startPeriodicSync() {
+        viewModelScope.launch {
+            while (true) {
+                delay(35_000L)
+                refreshLibraryIfStale(minIntervalMs = 30_000L)
+            }
         }
     }
 
@@ -320,6 +332,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectHomeFilter(tag: String) {
         homeFilterFlow.value = tag
+        refreshLibraryIfStale(minIntervalMs = 2_000L)
     }
 
     fun updateSearchQuery(query: String) {

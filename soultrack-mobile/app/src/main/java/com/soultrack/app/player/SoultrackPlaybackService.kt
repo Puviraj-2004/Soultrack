@@ -68,8 +68,7 @@ class SoultrackPlaybackService : MediaSessionService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         mediaSession?.player?.let { player ->
             player.playWhenReady = false
-            player.stop()
-            player.clearMediaItems()
+            player.pause()
         }
         stopForeground(Service.STOP_FOREGROUND_REMOVE)
         stopSelf()

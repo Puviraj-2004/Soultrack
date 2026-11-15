@@ -19,7 +19,7 @@ import java.io.File
 
 @OptIn(UnstableApi::class)
 object AudioCacheProvider {
-    private const val MAX_CACHE_BYTES = 150L * 1024L * 1024L // 150 MB
+    private const val MAX_CACHE_BYTES = 350L * 1024L * 1024L // 350 MB (stores ~100-120 full songs on device)
     private const val PREFETCH_HEAD_BYTES = 256L * 1024L // 256 KB instant-start head
 
     @Volatile

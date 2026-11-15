@@ -111,6 +111,12 @@ class PlayerController(
                 if (pending != null) {
                     startQueuePlayback(mc, pending.songs, pending.startIndex)
                 } else {
+                    if (mc.mediaItemCount == 0 && managedQueue.songs.isNotEmpty()) {
+                        val items = managedQueue.songs.map(::toMediaItem)
+                        val startIdx = managedQueue.currentIndex.coerceIn(0, managedQueue.songs.lastIndex)
+                        mc.setMediaItems(items, startIdx, 0L)
+                        mc.prepare()
+                    }
                     syncFromController(mc)
                 }
             }
@@ -171,6 +177,17 @@ class PlayerController(
             bufferedPositionMs = player.bufferedPosition.coerceAtLeast(0L)
         )
 
+        val hasNext = if (player.mediaItemCount == 0 && managedQueue.songs.isNotEmpty()) {
+            managedQueue.currentIndex < managedQueue.songs.lastIndex
+        } else {
+            player.hasNextMediaItem()
+        }
+        val hasPrevious = if (player.mediaItemCount == 0 && managedQueue.songs.isNotEmpty()) {
+            managedQueue.currentIndex > 0
+        } else {
+            player.hasPreviousMediaItem()
+        }
+
         _state.update {
             it.copy(
                 currentSong = activeSong,
@@ -178,8 +195,8 @@ class PlayerController(
                 currentIndex = currentIdx,
                 isPlaying = player.isPlaying,
                 isBuffering = player.playbackState == Player.STATE_BUFFERING,
-                hasNext = player.hasNextMediaItem(),
-                hasPrevious = player.hasPreviousMediaItem(),
+                hasNext = hasNext,
+                hasPrevious = hasPrevious,
                 shuffleEnabled = shuffleActive,
                 isSmartMix = smartMixActive,
                 priorityQueueCount = managedQueue.priorityCount,
@@ -459,6 +476,10 @@ class PlayerController(
                 errorMessage = null
             )
         }
+        if (mc.mediaItemCount == 0 || index >= mc.mediaItemCount || mc.getMediaItemAt(index).mediaId != target.id) {
+            startQueuePlayback(mc, managedQueue.songs, index)
+            return
+        }
         mc.seekToDefaultPosition(index)
         mc.prepare()
         mc.play()
@@ -505,8 +526,16 @@ class PlayerController(
         if (mc.isPlaying) {
             mc.pause()
         } else {
+            if (mc.mediaItemCount == 0 && managedQueue.songs.isNotEmpty()) {
+                val startIdx = managedQueue.currentIndex.coerceIn(0, managedQueue.songs.lastIndex)
+                startQueuePlayback(mc, managedQueue.songs, startIdx)
+                return
+            }
             if (mc.playbackState == Player.STATE_ENDED) {
                 mc.seekTo(mc.currentMediaItemIndex, 0L)
+            }
+            if (mc.playbackState == Player.STATE_IDLE) {
+                mc.prepare()
             }
             mc.play()
         }
@@ -514,6 +543,13 @@ class PlayerController(
 
     fun next() {
         val mc = controller ?: return
+        if (mc.mediaItemCount == 0 && managedQueue.songs.isNotEmpty()) {
+            val nextIdx = managedQueue.currentIndex + 1
+            if (nextIdx in managedQueue.songs.indices) {
+                playQueueIndex(nextIdx)
+            }
+            return
+        }
         if (mc.hasNextMediaItem()) {
             mc.seekToNextMediaItem()
             if (!mc.isPlaying) mc.play()
@@ -522,6 +558,11 @@ class PlayerController(
 
     fun previous() {
         val mc = controller ?: return
+        if (mc.mediaItemCount == 0 && managedQueue.songs.isNotEmpty()) {
+            val prevIdx = (managedQueue.currentIndex - 1).coerceAtLeast(0)
+            playQueueIndex(prevIdx)
+            return
+        }
         if (mc.currentPosition > 3000L || !mc.hasPreviousMediaItem()) {
             mc.seekTo(0L)
             if (!mc.isPlaying && mc.playbackState == Player.STATE_ENDED) {

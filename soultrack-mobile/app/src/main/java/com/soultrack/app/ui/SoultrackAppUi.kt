@@ -238,6 +238,7 @@ fun SoultrackAppUi(viewModel: MainViewModel) {
                                 viewModel.closePlaylist()
                             }
                             activeTab = MainTab.HOME
+                            viewModel.refreshLibraryIfStale(minIntervalMs = 2_000L)
                         },
                         icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
                         label = { Text("Home") }
