@@ -7,7 +7,7 @@ import kotlin.random.Random
 
 internal enum class MusicStyleGroup(val keywords: Set<String>) {
     CHILL_LOFI(setOf("lofi", "slowed", "reverb", "chill", "ambient", "study", "sleep", "rain", "night", "dreamy", "relax")),
-    REMIX_CLUB(setOf("remix", "mashup", "mix", "dj", "club", "edm", "house", "techno", "trance", "dubstep", "bass", "boosted", "phonk")),
+    REMIX_CLUB(setOf("remix", "mashup", "club", "edm", "house", "techno", "trance", "dubstep", "bass", "boosted", "phonk")),
     ACOUSTIC_LIVE(setOf("acoustic", "unplugged", "live", "session", "concert", "cover", "piano", "guitar", "violin", "flute")),
     INSTRUMENTAL_BGM(setOf("instrumental", "bgm", "theme", "ost", "score", "soundtrack", "karaoke", "beat", "beats", "synth")),
     ROMANTIC_MELODY(setOf("love", "romantic", "melody", "heart", "kadhal", "ishq", "pyaar", "mohabbat", "soul", "valentine", "vellake")),
@@ -70,7 +70,7 @@ internal object SmartQueueEngine {
             .toCollection(LinkedHashSet())
 
         val primaryArtist = normalizedArtists.firstOrNull() ?: cleanArtistToken(song.artist)
-        val combinedMetaText = "${song.title} ${song.artist} ${song.genre} ${song.mood} ${song.tags.joinToString(" ")}"
+        val combinedMetaText = "${song.title} ${song.tags.joinToString(" ")}"
         val tokens = tokenizeTitleAndArtist(combinedMetaText)
         val styles = detectStyles(tokens)
         val titleTokens = tokenizeTitleAndArtist(song.title)
@@ -114,76 +114,54 @@ internal object SmartQueueEngine {
     }
 
     /**
-     * Scores how closely [candidate] relates to [seed] across author/artist, structured real metadata
-     * (`genre`, `mood`, `language`, `album`, `tags`), title style/keywords, duration, and popularity.
-     * Deliberately ignores playlist membership so Home playback creates independent mixes.
+     * Scores how closely [candidate] relates to [seed] using balanced user-specified weights:
+     * - Same Language: 25 points
+     * - Same Genre: 30 points
+     * - Same Mood: 30 points
+     * - Shared Tags & Style: 25 points
+     * - Same Artist: 15 points
      */
     fun scoreSimilarity(seed: SongProfile, candidate: SongProfile): Double {
         if (seed.song.id == candidate.song.id) return 0.0
         var score = 0.0
 
-        // 1. Author / Artist affinity (strongest signal)
+        // 1. Same Language: 25 points
+        if (seed.language.isNotEmpty() && seed.language.equals(candidate.language, ignoreCase = true)) {
+            score += 25.0
+        }
+
+        // 2. Same Genre: 30 points
+        if (seed.genre.isNotEmpty() && seed.genre.equals(candidate.genre, ignoreCase = true)) {
+            score += 30.0
+        }
+
+        // 3. Same Mood: 30 points
+        if (seed.mood.isNotEmpty() && seed.mood.equals(candidate.mood, ignoreCase = true)) {
+            score += 30.0
+        }
+
+        // 4. Shared Tags & Style: 25 points
+        val sharedTags = seed.normalizedTags.intersect(candidate.normalizedTags).size
+        val sharedStyles = seed.styles.intersect(candidate.styles).size
+        val sharedKeywords = seed.titleKeywords.intersect(candidate.titleKeywords).size
+        val tagAndStyleSignal = (sharedTags * 12.0) + (sharedStyles * 25.0) + (sharedKeywords * 10.0)
+        if (tagAndStyleSignal > 0) {
+            score += tagAndStyleSignal.coerceAtMost(25.0)
+        }
+
+        // 5. Same Artist: 15 points
         if (seed.primaryArtist.isNotEmpty() &&
             seed.primaryArtist !in unknownArtistLabels &&
-            seed.primaryArtist == candidate.primaryArtist
+            seed.primaryArtist.equals(candidate.primaryArtist, ignoreCase = true)
         ) {
-            score += 80.0
+            score += 15.0
         } else if (seed.artists.isNotEmpty() && seed.artists.any { it in candidate.artists }) {
-            score += 58.0
+            score += 15.0
         } else if (sharesArtistSurnameOrAlias(seed.artists, candidate.artists)) {
-            score += 44.0
+            score += 10.0
         }
 
-        // 2. Real Music Metadata signals (genre, mood, language, album, tags)
-        if (seed.genre.isNotEmpty() && seed.genre == candidate.genre) {
-            score += 48.0
-        }
-        if (seed.mood.isNotEmpty() && seed.mood == candidate.mood) {
-            score += 36.0
-        }
-        if (seed.language.isNotEmpty() && seed.language == candidate.language) {
-            score += 24.0
-        }
-        if (seed.album.isNotEmpty() && seed.album == candidate.album) {
-            score += 22.0
-        }
-        val sharedTags = seed.normalizedTags.intersect(candidate.normalizedTags).size
-        if (sharedTags > 0) {
-            score += (sharedTags * 12.0).coerceAtMost(30.0)
-        }
-
-        // 3. Fallback style group & title/movie keywords
-        val sharedStyles = seed.styles.intersect(candidate.styles).size
-        if (sharedStyles > 0) {
-            score += 28.0 + ((sharedStyles - 1) * 12.0).coerceAtMost(24.0)
-        }
-        val sharedKeywords = seed.titleKeywords.intersect(candidate.titleKeywords).size
-        if (sharedKeywords > 0) {
-            score += (sharedKeywords * 14.0).coerceAtMost(28.0)
-        }
-
-        // 4. Track format & duration vibe similarity
-        val d1 = seed.song.durationSeconds
-        val d2 = candidate.song.durationSeconds
-        if (d1 > 0 && d2 > 0) {
-            val ratio = min(d1, d2).toDouble() / max(d1, d2).toDouble()
-            if (ratio >= 0.68 || durationBucket(d1) == durationBucket(d2)) {
-                score += 10.0
-            }
-        }
-        if (seed.song.sourceType.equals(candidate.song.sourceType, ignoreCase = true)) {
-            score += 4.0
-        }
-
-        // 5. Gentle popularity preference
-        score += candidate.song.playCount.coerceIn(0, 6).toDouble()
         return score
-    }
-
-    private fun durationBucket(durationSec: Int): Int = when {
-        durationSec < 150 -> 0 // Short / BGM / intro
-        durationSec <= 330 -> 1 // Standard song
-        else -> 2 // Extended / mashup / mix
     }
 
     /**
@@ -222,7 +200,8 @@ internal object SmartQueueEngine {
     ): List<SongDto> {
         if (validCandidates.isEmpty()) return emptyList()
         val seedProfile = extractProfile(seed)
-        val remaining = validCandidates.map(::extractProfile).toMutableList()
+        // Pre-shuffle candidates with the random source so there is zero initial list-order bias
+        val remaining = validCandidates.shuffled(random).map(::extractProfile).toMutableList()
         val ordered = ArrayList<SongDto>(validCandidates.size)
 
         var prevProfile = seedProfile
@@ -230,26 +209,25 @@ internal object SmartQueueEngine {
         val total = remaining.size
 
         for (step in 0 until total) {
-            val progress = step.toDouble() / max(total, 1).toDouble()
-            val seedWeight = 1.0 - (0.35 * progress)
-
             var bestIdx = 0
             var bestScore = Double.NEGATIVE_INFINITY
 
             for (i in remaining.indices) {
                 val cand = remaining[i]
                 val seedAffinity = scoreSimilarity(seedProfile, cand)
-                val transitionAffinity = scoreSimilarity(prevProfile, cand)
                 val streakPenalty = artistStreakPenalty(
                     candidate = cand,
                     prev = prevProfile,
                     prevPrevArtist = prevPrevArtist
                 )
-                val jitter = random.nextDouble(0.0, 26.0)
-                val totalScore = (seedWeight * seedAffinity) +
-                    (0.30 * transitionAffinity) -
-                    streakPenalty +
-                    jitter
+                // Balanced random jitter:
+                // Shuffles matching tracks dynamically every time according to user-configured points
+                val jitter = if (seedAffinity > 0.0) {
+                    random.nextDouble(0.0, 30.0)
+                } else {
+                    random.nextDouble(0.0, 2.0)
+                }
+                val totalScore = seedAffinity - streakPenalty + jitter
 
                 if (totalScore > bestScore) {
                     bestScore = totalScore
@@ -276,8 +254,8 @@ internal object SmartQueueEngine {
         val sameAsPrev = candArtist == prev.primaryArtist
         val sameAsPrevPrev = candArtist == prevPrevArtist
         return when {
-            sameAsPrev && sameAsPrevPrev -> 48.0
-            sameAsPrev -> 16.0
+            sameAsPrev && sameAsPrevPrev -> 24.0
+            sameAsPrev -> 12.0
             else -> 0.0
         }
     }

@@ -487,4 +487,96 @@ class SoultrackUnitTest {
         )
         assertEquals(listOf("seed", "meta-match", "shared-pl-edm"), built.map { it.id })
     }
+
+    @Test
+    fun customScoringAlgorithmWeightsAndDynamicShuffling() {
+        val seed = SongDto(
+            id = "seed-aasa",
+            title = "Aasa Kooda",
+            artist = "Sai Abhyankkar",
+            genre = "Melody",
+            mood = "Romantic",
+            language = "Tamil",
+            tags = listOf("Acoustic", "Feel Good"),
+            audioUrl = "https://cdn/aasa.m4a"
+        )
+        val seedProfile = SmartQueueEngine.extractProfile(seed)
+
+        // 1. Same Language: 25 points
+        val langOnly = SongDto(
+            id = "lang-only",
+            title = "Kuthu Fire",
+            artist = "Anirudh",
+            genre = "Kuthu",
+            mood = "Energetic",
+            language = "Tamil",
+            audioUrl = "https://cdn/lang.m4a"
+        )
+        assertEquals(25.0, SmartQueueEngine.scoreSimilarity(seedProfile, SmartQueueEngine.extractProfile(langOnly)), 0.001)
+
+        // 2. Same Genre: 30 points
+        val genreOnly = SongDto(
+            id = "genre-only",
+            title = "Tum Hi Ho",
+            artist = "Arijit Singh",
+            genre = "Melody",
+            mood = "Sad",
+            language = "Hindi",
+            audioUrl = "https://cdn/genre.m4a"
+        )
+        assertEquals(30.0, SmartQueueEngine.scoreSimilarity(seedProfile, SmartQueueEngine.extractProfile(genreOnly)), 0.001)
+
+        // 3. Same Mood: 30 points
+        val moodOnly = SongDto(
+            id = "mood-only",
+            title = "Perfect",
+            artist = "Ed Sheeran",
+            genre = "Pop",
+            mood = "Romantic",
+            language = "English",
+            audioUrl = "https://cdn/mood.m4a"
+        )
+        assertEquals(30.0, SmartQueueEngine.scoreSimilarity(seedProfile, SmartQueueEngine.extractProfile(moodOnly)), 0.001)
+
+        // 4. Shared Tags & Style: 25 points
+        val tagStyleOnly = SongDto(
+            id = "tag-only",
+            title = "Chill Lofi Theme",
+            artist = "Instrumental Guy",
+            genre = "Instrumental",
+            mood = "Chill",
+            language = "Instrumental",
+            tags = listOf("Acoustic"),
+            audioUrl = "https://cdn/tag.m4a"
+        )
+        val tagScore = SmartQueueEngine.scoreSimilarity(seedProfile, SmartQueueEngine.extractProfile(tagStyleOnly))
+        assertTrue("Tag score should be positive up to 25.0: $tagScore", tagScore in 10.0..25.0)
+
+        // 5. Same Artist: 15 points
+        val artistOnly = SongDto(
+            id = "artist-only",
+            title = "Different Song",
+            artist = "Sai Abhyankkar",
+            genre = "EDM",
+            mood = "Party",
+            language = "Telugu",
+            audioUrl = "https://cdn/artist.m4a"
+        )
+        assertEquals(15.0, SmartQueueEngine.scoreSimilarity(seedProfile, SmartQueueEngine.extractProfile(artistOnly)), 0.001)
+
+        // 6. Test dynamic shuffling across plays
+        val match1 = SongDto(id = "m1", title = "Pavazha Malli", artist = "Sai Abhyankkar", genre = "Melody", mood = "Romantic", language = "Tamil", audioUrl = "https://cdn/1.m4a")
+        val match2 = SongDto(id = "m2", title = "Katchi Sera", artist = "Sai Abhyankkar", genre = "Melody", mood = "Romantic", language = "Tamil", audioUrl = "https://cdn/2.m4a")
+        val match3 = SongDto(id = "m3", title = "Malare", artist = "Vidyasagar", genre = "Melody", mood = "Romantic", language = "Tamil", audioUrl = "https://cdn/3.m4a")
+        val match4 = SongDto(id = "m4", title = "Munbe Vaa", artist = "AR Rahman", genre = "Melody", mood = "Romantic", language = "Tamil", audioUrl = "https://cdn/4.m4a")
+        val pool = listOf(match1, match2, match3, match4, langOnly)
+
+        val run1 = SmartQueueEngine.buildRelatedQueue(seed, pool, Random(1)).drop(1).map { it.id }
+        val run2 = SmartQueueEngine.buildRelatedQueue(seed, pool, Random(99)).drop(1).map { it.id }
+        // Verify both runs produce different fresh shuffles of the high matching melodies
+        assertTrue("run1: $run1 vs run2: $run2", run1 != run2)
+        // Verify unrelated / language-only track remains at the tail (index 4)
+        assertEquals("lang-only", run1.last())
+        assertEquals("lang-only", run2.last())
+    }
 }
