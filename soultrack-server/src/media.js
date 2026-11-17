@@ -195,38 +195,118 @@ export function createMediaTools(config) {
         const json = await res.json()
         const match = json?.results?.[0]
         if (!match) return null
+        const rawArtwork = match.artworkUrl100 || match.artworkUrl60 || null
+        const highResArtwork = rawArtwork
+          ? rawArtwork.replace(/100x100[a-z0-9_-]*\./i, '1000x1000bb.')
+          : null
         return {
           title: match.trackName || null,
           artist: match.artistName || null,
           album: match.collectionName || null,
           genre: match.primaryGenreName || null,
           releaseDate: match.releaseDate || null,
-          artworkUrl: match.artworkUrl100 ? match.artworkUrl100.replace('100x100', '600x600') : null,
+          artworkUrl: highResArtwork || (rawArtwork ? rawArtwork.replace('100x100', '600x600') : null),
         }
       } catch {
         return null
       }
     },
 
+    async fetchYoutubePlaylistEntries(playlistUrl, maxEntries = 60) {
+      try {
+        const { stdout } = await runYtDlp([
+          '--flat-playlist',
+          '--dump-single-json',
+          '--playlist-end', String(maxEntries),
+          playlistUrl,
+        ], 60_000)
+        const info = JSON.parse(stdout)
+        const entries = Array.isArray(info?.entries) ? info.entries : []
+        return entries
+          .map(entry => {
+            const id = entry?.id || entry?.url
+            if (!id || typeof id !== 'string') return null
+            const cleanId = id.replace(/^https?:\/\/.*v=/i, '').slice(0, 32)
+            return {
+              id: cleanId,
+              title: (entry.title || 'Untitled Track').trim().slice(0, 200),
+              durationSeconds: Math.max(0, Math.round(Number(entry.duration) || 0)),
+              url: `https://www.youtube.com/watch?v=${cleanId}`,
+            }
+          })
+          .filter(Boolean)
+      } catch (err) {
+        throw new Error(`yt-dlp playlist failed: ${cleanExecError(err, 'Could not inspect playlist')}`)
+      }
+    },
+
     async extractAiMetadata({ title = '', artist = '', cleanQuery = '', description = '' } = {}) {
+      const prompt = [
+        'Extract clean music metadata as JSON with keys: title, artist, album, genre, mood, language, tags.',
+        'Rules:',
+        '- title: clean song title only (remove video spam like Official Video, Lyrical Video, 4K, movie/actor names). Keep mix style like (Lofi) or (Remix) if applicable.',
+        '- artist: comma-separated real composer and/or singers. NEVER use YouTube channel or record label names like Universal Music, Sony Music, Think Music, Sun TV.',
+        '- album: movie or album name only, or empty string.',
+        '- genre: pick ONE from [Melody, Mass, Lofi, Remix, Instrumental, Acoustic, Hip-Hop, Devotional, Classical, Pop].',
+        '- mood: pick ONE from [Romantic, Chill, Emotional, Energetic, Party, Focus, Feel Good, Devotional].',
+        '- language: pick ONE from [Tamil, Hindi, Telugu, Malayalam, English, Instrumental].',
+        '- tags: array of 3-7 short lowercase search tags (era like 90s/2020s, vibe, theme).',
+        `Raw title: ${title}`,
+        `Clean query: ${cleanQuery}`,
+        `Channel/uploader: ${artist}`,
+        `Description excerpt: ${String(description || '').slice(0, 1200)}`,
+      ].join('\n')
+
+      // 1. Primary AI: Groq (Ultra-fast LPU inference: ~300ms)
+      if (config.groqApiKey) {
+        try {
+          const groqModel = config.groqModel || 'llama-3.3-70b-versatile'
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${config.groqApiKey}`,
+            },
+            body: JSON.stringify({
+              model: groqModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are an expert music metadata classifier. Return only a valid JSON object matching the requested schema.',
+                },
+                {
+                  role: 'user',
+                  content: prompt,
+                },
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.1,
+              max_tokens: 512,
+            }),
+            signal: AbortSignal.timeout(6_000),
+          })
+
+          if (res.ok) {
+            const json = await res.json()
+            const rawContent = json?.choices?.[0]?.message?.content
+            if (rawContent) {
+              const parsed = JSON.parse(rawContent)
+              if (parsed && typeof parsed === 'object') {
+                return parsed
+              }
+            }
+          } else {
+            const errBody = await res.text().catch(() => '')
+            console.warn(`[groq] API returned HTTP ${res.status}: ${errBody.slice(0, 160)}`)
+          }
+        } catch (groqErr) {
+          console.warn(`[groq] Failed: ${groqErr.message}. Falling back to Gemini...`)
+        }
+      }
+
+      // 2. Fallback AI: Google Gemini
       if (!config.geminiApiKey) return null
       try {
-        const prompt = [
-          'Extract clean music metadata as JSON with keys: title, artist, album, genre, mood, language, tags.',
-          'Rules:',
-          '- title: clean song title only (remove video spam like Official Video, Lyrical Video, 4K, movie/actor names). Keep mix style like (Lofi) or (Remix) if applicable.',
-          '- artist: comma-separated real composer and/or singers. NEVER use YouTube channel or record label names like Universal Music, Sony Music, Think Music, Sun TV.',
-          '- album: movie or album name only, or empty string.',
-          '- genre: pick ONE from [Melody, Mass, Lofi, Remix, Instrumental, Acoustic, Hip-Hop, Devotional, Classical, Pop].',
-          '- mood: pick ONE from [Romantic, Chill, Emotional, Energetic, Party, Focus, Feel Good, Devotional].',
-          '- language: pick ONE from [Tamil, Hindi, Telugu, Malayalam, English, Instrumental].',
-          '- tags: array of 3-7 short lowercase search tags (era like 90s/2020s, vibe, theme).',
-          `Raw title: ${title}`,
-          `Clean query: ${cleanQuery}`,
-          `Channel/uploader: ${artist}`,
-          `Description excerpt: ${String(description || '').slice(0, 1200)}`,
-        ].join('\n')
-
         const candidateModels = [
           config.geminiModel,
           'gemini-3.5-flash-lite',

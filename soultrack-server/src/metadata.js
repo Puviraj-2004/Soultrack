@@ -566,5 +566,6 @@ export async function enrichSongWithMetadata({
     language: inferred.language,
     album: inferred.album,
     tags: inferred.tags,
+    artworkUrl: itunes?.artworkUrl || null,
   }
 }

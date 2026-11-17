@@ -45,18 +45,6 @@ export function createIngestionWorker({ repo, storage, media, concurrency = 2 })
         contentType: 'audio/mp4',
       })
 
-      let thumbnailUrl = info.thumbnailUrl
-      let thumbnailKey = null
-      const cover = await media.downloadImageFile(info.thumbnailUrl, tmpDir)
-      if (cover) {
-        thumbnailKey = `covers/${songId}.${cover.ext}`
-        thumbnailUrl = await storage.putFile({
-          key: thumbnailKey,
-          filePath: cover.filePath,
-          contentType: cover.contentType,
-        })
-      }
-
       const meta = await enrichSongWithMetadata({
         title: overrideTitle || info.title,
         artist: overrideArtist || info.artist,
@@ -72,6 +60,21 @@ export function createIngestionWorker({ repo, storage, media, concurrency = 2 })
         lookupItunes: media.lookupItunesMetadata?.bind(media),
         extractWithAi: media.extractAiMetadata?.bind(media),
       })
+
+      let thumbnailUrl = meta.artworkUrl || info.thumbnailUrl
+      let thumbnailKey = null
+      let cover = await media.downloadImageFile(thumbnailUrl, tmpDir).catch(() => null)
+      if (!cover && meta.artworkUrl && info.thumbnailUrl) {
+        cover = await media.downloadImageFile(info.thumbnailUrl, tmpDir).catch(() => null)
+      }
+      if (cover) {
+        thumbnailKey = `covers/${songId}.${cover.ext}`
+        thumbnailUrl = await storage.putFile({
+          key: thumbnailKey,
+          filePath: cover.filePath,
+          contentType: cover.contentType,
+        })
+      }
 
       await repo.updateSong(songId, {
         title: overrideTitle || meta.title || info.title,

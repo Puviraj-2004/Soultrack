@@ -288,7 +288,7 @@ export function createApp({ repo, storage, worker, media, config }) {
 
       res.json({
         youtubeId,
-        thumbnailUrl: info.thumbnailUrl || null,
+        thumbnailUrl: enriched.artworkUrl || info.thumbnailUrl || null,
         durationSeconds: info.durationSeconds || 0,
         metadata: enriched,
       })
@@ -374,6 +374,125 @@ export function createApp({ repo, storage, worker, media, config }) {
 
       worker.enqueue({ songId: created.id, youtubeId, playlistId, overrides })
       res.status(202).json({ song: formatSongForClient(created) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  app.post('/api/admin/ingest/bulk', adminGuard, async (req, res, next) => {
+    try {
+      const rawInput = req.body?.input || req.body?.urls || req.body?.url || ''
+      const playlistId = req.body?.playlistId ? String(req.body.playlistId) : null
+      if (playlistId && !isValidUuid(playlistId)) {
+        return res.status(400).json({ error: 'Invalid playlistId.' })
+      }
+
+      let detectedUrls = []
+
+      // If it's a YouTube Playlist URL (e.g. contains "list=" and ("youtube" or "youtu.be"))
+      const singleText = typeof rawInput === 'string' ? rawInput.trim() : ''
+      if (singleText && /[?&]list=([a-zA-Z0-9_-]+)/i.test(singleText) && /youtu(\.be|be\.com)/i.test(singleText)) {
+        if (typeof media.fetchYoutubePlaylistEntries === 'function') {
+          const entries = await media.fetchYoutubePlaylistEntries(singleText, 60)
+          detectedUrls = entries.map(e => e.url)
+        }
+      }
+
+      if (!detectedUrls.length) {
+        // Parse list of URLs from array or multiline string
+        const lines = Array.isArray(rawInput)
+          ? rawInput
+          : String(rawInput || '').split(/[\r\n,]+/)
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          const ytId = extractYoutubeId(trimmed)
+          if (ytId) {
+            detectedUrls.push(canonicalYoutubeUrl(ytId))
+          }
+        }
+      }
+
+      // Deduplicate within the input list
+      const uniqueUrls = [...new Set(detectedUrls)]
+      if (!uniqueUrls.length) {
+        return res.status(400).json({ error: 'No valid YouTube video or playlist URLs found.' })
+      }
+
+      const results = {
+        total: uniqueUrls.length,
+        queued: 0,
+        skippedDuplicates: 0,
+        songs: [],
+      }
+
+      for (const url of uniqueUrls) {
+        const youtubeId = extractYoutubeId(url)
+        if (!youtubeId) continue
+
+        const existing = await repo.findSongByYoutubeId(youtubeId)
+        if (existing) {
+          if (existing.status === 'READY') {
+            if (playlistId) {
+              await repo.addSongToPlaylist(playlistId, existing.id).catch(() => {})
+            }
+            results.skippedDuplicates++
+            results.songs.push({
+              youtubeId,
+              status: 'duplicate',
+              title: existing.title,
+              songId: existing.id,
+            })
+            continue
+          } else if (existing.status === 'FAILED') {
+            await repo.updateSong(existing.id, {
+              status: 'PROCESSING',
+              error_message: null,
+            })
+            worker.enqueue({ songId: existing.id, youtubeId, playlistId, overrides: null })
+            results.queued++
+            results.songs.push({
+              youtubeId,
+              status: 'retried',
+              songId: existing.id,
+            })
+            continue
+          } else if (existing.status === 'PROCESSING') {
+            results.songs.push({
+              youtubeId,
+              status: 'processing',
+              songId: existing.id,
+            })
+            continue
+          }
+        }
+
+        const created = await repo.createSong({
+          source_type: 'youtube',
+          youtube_id: youtubeId,
+          title: `Importing ${youtubeId}...`,
+          artist: 'Processing...',
+          genre: 'Other',
+          mood: 'Other',
+          language: 'Other',
+          album: '',
+          tags: [],
+          duration_seconds: 0,
+          audio_url: '',
+          status: 'PROCESSING',
+        })
+
+        worker.enqueue({ songId: created.id, youtubeId, playlistId, overrides: null })
+        results.queued++
+        results.songs.push({
+          youtubeId,
+          status: 'queued',
+          songId: created.id,
+        })
+      }
+
+      res.status(202).json(results)
     } catch (err) {
       next(err)
     }

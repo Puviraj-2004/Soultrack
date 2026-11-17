@@ -780,3 +780,51 @@ dialog::backdrop {
     text-align: center;
   }
 }
+
+.import-mode-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.import-mode-tabs .tab-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.import-mode-tabs .tab-btn:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.import-mode-tabs .tab-btn.active {
+  background: rgba(0, 150, 255, 0.12);
+  color: var(--primary);
+}
+
+.bulk-textarea {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: vertical;
+  line-height: 1.45;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.bulk-textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}

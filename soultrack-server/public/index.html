@@ -141,78 +141,105 @@
           <h3 id="yt-heading">Import from YouTube</h3>
           <button type="button" class="btn-icon" data-close-dialog="yt-dialog" aria-label="Close">✕</button>
         </div>
-        <p class="hint">Paste a YouTube or YouTube Music URL — metadata auto-fills before download.</p>
-        <div class="field">
-          <label for="yt-url">YouTube video URL <span aria-hidden="true">*</span></label>
-          <div class="url-preview-row">
-            <input
-              id="yt-url"
-              name="url"
-              type="url"
-              required
-              autocorrect="off"
-              autocapitalize="none"
-              spellcheck="false"
-              placeholder="https://www.youtube.com/watch?v=..."
-              aria-invalid="false"
-              data-error="yt-url-error"
-            />
-            <button id="yt-preview-btn" type="button" class="btn btn-ghost">Fetch Info</button>
-          </div>
-          <div id="yt-url-error" class="error-msg">Enter a valid http(s) YouTube URL.</div>
+        <div class="import-mode-tabs" role="tablist">
+          <button type="button" id="yt-tab-single" class="tab-btn active" role="tab" aria-selected="true">Single URL</button>
+          <button type="button" id="yt-tab-bulk" class="tab-btn" role="tab" aria-selected="false">Bulk / Playlist Import ⚡</button>
         </div>
 
-        <div id="yt-preview-panel" class="yt-preview-box" hidden>
-          <div class="yt-preview-head">
-            <img id="yt-preview-thumb" class="yt-preview-thumb" alt="" hidden />
-            <div class="yt-preview-meta">
-              <div class="yt-preview-label">Preview &amp; Auto-Fill</div>
-              <div id="yt-preview-duration" class="yt-preview-sub">Review before importing</div>
+        <div id="yt-single-section">
+          <p class="hint">Paste a YouTube or YouTube Music URL — metadata auto-fills before download.</p>
+          <div class="field">
+            <label for="yt-url">YouTube video URL <span aria-hidden="true">*</span></label>
+            <div class="url-preview-row">
+              <input
+                id="yt-url"
+                name="url"
+                type="url"
+                required
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+                placeholder="https://www.youtube.com/watch?v=..."
+                aria-invalid="false"
+                data-error="yt-url-error"
+              />
+              <button id="yt-preview-btn" type="button" class="btn btn-ghost">Fetch Info</button>
+            </div>
+            <div id="yt-url-error" class="error-msg">Enter a valid http(s) YouTube URL.</div>
+          </div>
+
+          <div id="yt-preview-panel" class="yt-preview-box" hidden>
+            <div class="yt-preview-head">
+              <img id="yt-preview-thumb" class="yt-preview-thumb" alt="" hidden />
+              <div class="yt-preview-meta">
+                <div class="yt-preview-label">Preview &amp; Auto-Fill</div>
+                <div id="yt-preview-duration" class="yt-preview-sub">Review before importing</div>
+              </div>
+            </div>
+            <div class="grid-two-compact">
+              <div class="field">
+                <label for="yt-title">Clean Title</label>
+                <input id="yt-title" name="title" type="text" maxlength="200" />
+              </div>
+              <div class="field">
+                <label for="yt-artist">Artist (Composer, Singers)</label>
+                <input id="yt-artist" name="artist" type="text" maxlength="200" placeholder="Anirudh, Jonita Gandhi" />
+              </div>
+            </div>
+            <div class="grid-two-compact">
+              <div class="field">
+                <label for="yt-genre">Genre</label>
+                <select id="yt-genre" name="genre" data-preset="genre"></select>
+              </div>
+              <div class="field">
+                <label for="yt-mood">Mood</label>
+                <select id="yt-mood" name="mood" data-preset="mood"></select>
+              </div>
+            </div>
+            <div class="grid-two-compact">
+              <div class="field">
+                <label for="yt-language">Language</label>
+                <select id="yt-language" name="language" data-preset="language"></select>
+              </div>
+              <div class="field">
+                <label for="yt-album">Album / Movie</label>
+                <input id="yt-album" name="album" type="text" maxlength="140" />
+              </div>
+            </div>
+            <div class="field" style="margin-block-end:0">
+              <label for="yt-tags">Tags (tap chips or type comma separated)</label>
+              <input id="yt-tags" name="tags" type="text" placeholder="90s, evergreen, duet" />
+              <div class="tag-chips" data-tag-target="yt-tags"></div>
             </div>
           </div>
-          <div class="grid-two-compact">
-            <div class="field">
-              <label for="yt-title">Clean Title</label>
-              <input id="yt-title" name="title" type="text" maxlength="200" />
-            </div>
-            <div class="field">
-              <label for="yt-artist">Artist (Composer, Singers)</label>
-              <input id="yt-artist" name="artist" type="text" maxlength="200" placeholder="Anirudh, Jonita Gandhi" />
-            </div>
-          </div>
-          <div class="grid-two-compact">
-            <div class="field">
-              <label for="yt-genre">Genre</label>
-              <select id="yt-genre" name="genre" data-preset="genre"></select>
-            </div>
-            <div class="field">
-              <label for="yt-mood">Mood</label>
-              <select id="yt-mood" name="mood" data-preset="mood"></select>
-            </div>
-          </div>
-          <div class="grid-two-compact">
-            <div class="field">
-              <label for="yt-language">Language</label>
-              <select id="yt-language" name="language" data-preset="language"></select>
-            </div>
-            <div class="field">
-              <label for="yt-album">Album / Movie</label>
-              <input id="yt-album" name="album" type="text" maxlength="140" />
-            </div>
-          </div>
-          <div class="field" style="margin-block-end:0">
-            <label for="yt-tags">Tags (tap chips or type comma separated)</label>
-            <input id="yt-tags" name="tags" type="text" placeholder="90s, evergreen, duet" />
-            <div class="tag-chips" data-tag-target="yt-tags"></div>
+
+          <div class="field">
+            <label for="yt-playlist">Add to playlist (optional)</label>
+            <select id="yt-playlist" name="playlistId">
+              <option value="">Library only</option>
+            </select>
           </div>
         </div>
 
-        <div class="field">
-          <label for="yt-playlist">Add to playlist (optional)</label>
-          <select id="yt-playlist" name="playlistId">
-            <option value="">Library only</option>
-          </select>
+        <div id="yt-bulk-section" hidden>
+          <div class="field">
+            <label for="yt-bulk-input">Paste YouTube URLs or Playlist Link <span aria-hidden="true">*</span></label>
+            <textarea
+              id="yt-bulk-input"
+              rows="6"
+              placeholder="Paste multiple YouTube video URLs (one per line) or a YouTube Playlist URL:&#10;https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/watch?v=...&#10;OR&#10;https://www.youtube.com/playlist?list=..."
+              class="bulk-textarea"
+            ></textarea>
+            <p class="hint">iTunes fetches HD artwork and Groq AI auto-assigns Genre, Mood &amp; Composer in the background.</p>
+          </div>
+          <div class="field">
+            <label for="yt-bulk-playlist">Add all to playlist (optional)</label>
+            <select id="yt-bulk-playlist" name="bulkPlaylistId">
+              <option value="">Library only</option>
+            </select>
+          </div>
         </div>
+
         <p id="ingest-status" class="status-msg" role="status" aria-live="polite" hidden></p>
         <div class="dialog-actions">
           <button type="button" class="btn btn-ghost" data-close-dialog="yt-dialog">Done</button>

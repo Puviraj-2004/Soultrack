@@ -488,9 +488,53 @@ test('Soultrack REST API, auth, ingestion worker, playlists, and version endpoin
       body: JSON.stringify({ title: 'Pathikichu' }),
     })
     assert.equal(dupRenameRes.status, 409)
+
+    // Test POST /api/admin/ingest/bulk with multiple URLs
+    const bulkRes = await fetch(`${baseUrl}/api/admin/ingest/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        input: 'https://www.youtube.com/watch?v=vid11111111\nhttps://www.youtube.com/watch?v=vid22222222\nhttps://www.youtube.com/watch?v=vid11111111',
+      }),
+    })
+    assert.equal(bulkRes.status, 202)
+    const bulkJson = await bulkRes.json()
+    assert.equal(bulkJson.total, 2) // Deduplicated vid11111111
+    assert.equal(bulkJson.queued, 2)
   } finally {
     await new Promise(resolve => server.close(resolve))
   }
+})
+
+test('enrichSongWithMetadata captures iTunes 1000x1000 artworkUrl and official album metadata', async () => {
+  const enriched = await enrichSongWithMetadata({
+    title: 'Aasa Kooda Think Indie',
+    artist: 'Think Music India',
+    lookupItunes: async () => ({
+      title: 'Aasa Kooda',
+      artist: 'Sai Abhyankkar',
+      album: 'Aasa Kooda - Single',
+      genre: 'Tamil',
+      artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/.../1000x1000bb.jpg',
+    }),
+    extractWithAi: async () => ({
+      title: 'Aasa Kooda',
+      artist: 'Sai Abhyankkar, Sai Smriti',
+      album: 'Aasa Kooda',
+      genre: 'Melody',
+      mood: 'Romantic',
+      language: 'Tamil',
+      tags: ['indie', 'feel good'],
+    }),
+  })
+
+  assert.equal(enriched.title, 'Aasa Kooda')
+  assert.equal(enriched.artworkUrl, 'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/.../1000x1000bb.jpg')
+  assert.equal(enriched.genre, 'Melody')
+  assert.equal(enriched.mood, 'Romantic')
 })
 
 test('inferSongMetadata derives genre, mood, language, and normalized tags', () => {

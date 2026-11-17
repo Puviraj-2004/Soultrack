@@ -52,6 +52,8 @@ export function loadConfig(env = process.env) {
     ytDlpProxy: (env.YTDLP_PROXY || '').trim(),
     ffmpegBin: (env.FFMPEG_BIN || 'ffmpeg').trim(),
     ffprobeBin: (env.FFPROBE_BIN || 'ffprobe').trim(),
+    groqApiKey: (env.GROQ_API_KEY || '').trim(),
+    groqModel: (env.GROQ_MODEL || 'llama-3.3-70b-versatile').trim(),
     geminiApiKey: (env.GEMINI_API_KEY || '').trim(),
     geminiModel: (env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim(),
     defaultAppRelease: {

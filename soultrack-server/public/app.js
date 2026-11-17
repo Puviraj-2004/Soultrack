@@ -258,13 +258,13 @@ async function confirmSignOut() {
 }
 
 function populatePlaylistSelects() {
-  const selectors = [el('yt-playlist'), el('upload-playlist'), el('edit-song-playlist')]
+  const selectors = [el('yt-playlist'), el('yt-bulk-playlist'), el('upload-playlist'), el('edit-song-playlist')].filter(Boolean)
   selectors.forEach((select, idx) => {
     const prev = select.value
     select.replaceChildren()
     const first = document.createElement('option')
     first.value = ''
-    first.textContent = idx === 2 ? 'Keep current playlists' : 'Library only'
+    first.textContent = select.id === 'edit-song-playlist' ? 'Keep current playlists' : 'Library only'
     select.append(first)
     state.playlists.forEach(pl => {
       const opt = document.createElement('option')
@@ -829,6 +829,41 @@ function bindEvents() {
     }
   }
 
+  let isBulkMode = false
+  const setImportMode = bulk => {
+    isBulkMode = Boolean(bulk)
+    const tabSingle = el('yt-tab-single')
+    const tabBulk = el('yt-tab-bulk')
+    const singleSec = el('yt-single-section')
+    const bulkSec = el('yt-bulk-section')
+    const ytUrl = el('yt-url')
+
+    if (tabSingle) {
+      tabSingle.classList.toggle('active', !isBulkMode)
+      tabSingle.setAttribute('aria-selected', !isBulkMode)
+    }
+    if (tabBulk) {
+      tabBulk.classList.toggle('active', isBulkMode)
+      tabBulk.setAttribute('aria-selected', isBulkMode)
+    }
+    if (singleSec) singleSec.hidden = isBulkMode
+    if (bulkSec) bulkSec.hidden = !isBulkMode
+    if (ytUrl) ytUrl.required = !isBulkMode
+
+    const submitBtn = el('ingest-submit-btn')
+    if (submitBtn) {
+      if (isBulkMode) {
+        submitBtn.textContent = 'Queue Bulk Import'
+      } else {
+        submitBtn.textContent = !el('yt-preview-panel').hidden ? 'Confirm & Import' : 'Queue Import'
+      }
+    }
+    setStatus(el('ingest-status'), '')
+  }
+
+  el('yt-tab-single')?.addEventListener('click', () => setImportMode(false))
+  el('yt-tab-bulk')?.addEventListener('click', () => setImportMode(true))
+
   el('yt-preview-btn').addEventListener('click', fetchYtPreview)
   el('yt-url').addEventListener('paste', () => {
     setTimeout(() => {
@@ -842,14 +877,49 @@ function bindEvents() {
 
   el('ingest-form').addEventListener('submit', async e => {
     e.preventDefault()
-    if (!e.target.reportValidity()) {
-      e.target.querySelector(':invalid')?.focus()
-      return
-    }
     const status = el('ingest-status')
     const btn = el('ingest-submit-btn')
     setStatus(status, '')
     btn.disabled = true
+
+    if (isBulkMode) {
+      const bulkInput = (el('yt-bulk-input')?.value || '').trim()
+      if (!bulkInput) {
+        setStatus(status, 'Please paste at least one YouTube URL or a playlist link.', true)
+        btn.disabled = false
+        el('yt-bulk-input')?.focus()
+        return
+      }
+      btn.textContent = 'Queueing Bulk Import...'
+      try {
+        const res = await api('/api/admin/ingest/bulk', {
+          method: 'POST',
+          body: JSON.stringify({
+            input: bulkInput,
+            playlistId: el('yt-bulk-playlist')?.value || null,
+          }),
+        })
+        if (el('yt-bulk-input')) el('yt-bulk-input').value = ''
+        setStatus(
+          status,
+          `✓ Successfully queued ${res.queued} songs! (${res.skippedDuplicates} duplicates skipped). Downloading in background...`,
+          false
+        )
+        await refreshAll()
+      } catch (err) {
+        setStatus(status, err.message, true)
+      } finally {
+        btn.disabled = false
+        btn.textContent = 'Queue Bulk Import'
+      }
+      return
+    }
+
+    if (!e.target.reportValidity()) {
+      e.target.querySelector(':invalid')?.focus()
+      btn.disabled = false
+      return
+    }
     try {
       const previewOpen = !el('yt-preview-panel').hidden
       const payload = {
