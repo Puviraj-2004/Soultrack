@@ -29,14 +29,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -44,6 +48,7 @@ import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.NorthWest
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Search
@@ -51,6 +56,9 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -69,6 +77,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -102,8 +111,10 @@ import androidx.media3.common.Player
 import com.soultrack.app.BuildConfig
 import com.soultrack.app.data.PlaylistDto
 import com.soultrack.app.data.SongDto
+import com.soultrack.app.player.AudioFxState
 import com.soultrack.app.player.PlaybackProgress
 import com.soultrack.app.player.PlayerUiState
+import com.soultrack.app.player.SleepTimerState
 import com.soultrack.app.ui.theme.AppThemeMode
 import com.soultrack.app.ui.theme.SoulBlue
 import kotlinx.coroutines.flow.StateFlow
@@ -144,6 +155,9 @@ private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float =
 fun SoultrackAppUi(viewModel: MainViewModel) {
     val libraryState by viewModel.uiState.collectAsStateWithLifecycle()
     val playerState by viewModel.playerController.state.collectAsStateWithLifecycle()
+    val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
+    val audioFxState by viewModel.audioFxState.collectAsStateWithLifecycle()
+    val cacheSizeBytes by viewModel.cacheSizeBytes.collectAsStateWithLifecycle()
     var activeTab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var showFullPlayer by rememberSaveable { mutableStateOf(false) }
     var menuSong by remember { mutableStateOf<SongDto?>(null) }
@@ -339,6 +353,35 @@ fun SoultrackAppUi(viewModel: MainViewModel) {
                     serverUrl = libraryState.serverUrl,
                     themeMode = libraryState.themeMode,
                     updateMessage = libraryState.updateMessage,
+                    sleepTimerState = sleepTimerState,
+                    audioFxState = audioFxState,
+                    cacheSizeBytes = cacheSizeBytes,
+                    onStartSleepTimer = { mins ->
+                        viewModel.startSleepTimer(mins)
+                        showToast("Sleep timer set for $mins minutes")
+                    },
+                    onSetSleepTimerEndOfTrack = {
+                        viewModel.setSleepTimerEndOfTrack()
+                        showToast("Sleep timer set: Pauses at end of track")
+                    },
+                    onCancelSleepTimer = {
+                        viewModel.cancelSleepTimer()
+                        showToast("Sleep timer turned off")
+                    },
+                    onSetAudioFxEnabled = { enabled ->
+                        viewModel.setAudioFxEnabled(enabled)
+                        showToast(if (enabled) "Equalizer enabled" else "Equalizer disabled")
+                    },
+                    onSetBassBoost = viewModel::setBassBoost,
+                    onSetEqualizerPreset = { preset ->
+                        viewModel.setEqualizerPreset(preset)
+                        showToast("Preset: $preset")
+                    },
+                    onSetBandLevel = viewModel::setBandLevel,
+                    onClearCache = {
+                        viewModel.clearAudioCache()
+                        showToast("Music cache cleared")
+                    },
                     onSelectThemeMode = viewModel::updateThemeMode,
                     onSaveServerUrl = { url ->
                         viewModel.updateServerUrl(url)
@@ -1524,6 +1567,17 @@ private fun SettingsScreen(
     serverUrl: String,
     themeMode: AppThemeMode,
     updateMessage: String?,
+    sleepTimerState: SleepTimerState,
+    audioFxState: AudioFxState,
+    cacheSizeBytes: Long,
+    onStartSleepTimer: (Int) -> Unit,
+    onSetSleepTimerEndOfTrack: () -> Unit,
+    onCancelSleepTimer: () -> Unit,
+    onSetAudioFxEnabled: (Boolean) -> Unit,
+    onSetBassBoost: (Int) -> Unit,
+    onSetEqualizerPreset: (String) -> Unit,
+    onSetBandLevel: (Short, Short) -> Unit,
+    onClearCache: () -> Unit,
     onSelectThemeMode: (AppThemeMode) -> Unit,
     onSaveServerUrl: (String) -> Unit,
     onCheckUpdates: () -> Unit
@@ -1538,27 +1592,424 @@ private fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Equalizer, sleep timer, sound curves & storage",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
+        // --- 1. Audio Equalizer & Bass Boost Card ---
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Appearance", fontWeight = FontWeight.Bold)
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Rounded.GraphicEq,
+                                    contentDescription = "Equalizer",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Audio Equalizer",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (audioFxState.isEnabled) "Active: ${audioFxState.selectedPreset}" else "Disabled",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (audioFxState.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = audioFxState.isEnabled,
+                        onCheckedChange = onSetAudioFxEnabled
+                    )
+                }
+
+                AnimatedVisibility(visible = audioFxState.isEnabled) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        // --- Bass Boost Slider ---
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Bass Boost",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "${audioFxState.bassBoostStrength / 10}%",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Slider(
+                                    value = audioFxState.bassBoostStrength.toFloat(),
+                                    onValueChange = { onSetBassBoost(it.roundToInt()) },
+                                    valueRange = 0f..1000f,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // --- Preset Chips ---
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Presets",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(audioFxState.presets) { preset ->
+                                    val isSelected = audioFxState.selectedPreset == preset
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { onSetEqualizerPreset(preset) },
+                                        label = { Text(preset, style = MaterialTheme.typography.bodySmall) },
+                                        leadingIcon = if (isSelected) {
+                                            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        } else null,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // --- 5-Band Equalizer Sliders ---
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                text = "5-Band Equalizer",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            audioFxState.bands.forEach { band ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = band.displayFrequency,
+                                        modifier = Modifier.width(64.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Slider(
+                                        value = band.levelMb.toFloat(),
+                                        onValueChange = { onSetBandLevel(band.bandIndex, it.roundToInt().toShort()) },
+                                        valueRange = band.minMb.toFloat()..band.maxMb.toFloat(),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = band.displayLevel,
+                                        modifier = Modifier.width(54.dp),
+                                        textAlign = TextAlign.End,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 2. Sleep Timer Card ---
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Bedtime,
+                                contentDescription = "Sleep Timer",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "Sleep Timer",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Fades volume gently and stops playback",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (sleepTimerState.isActive) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Timer,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Active Countdown",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = sleepTimerState.formattedRemaining,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = onCancelSleepTimer,
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text("Turn Off", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+
                 Text(
-                    "Follows your device theme automatically in Auto mode, or lock Light / Dark.",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Quick Presets",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val timerOptions = listOf(15, 30, 45, 60)
+                    items(timerOptions) { mins ->
+                        val isSelected = sleepTimerState.isActive && !sleepTimerState.isEndOfTrack &&
+                            sleepTimerState.totalSeconds == mins.toLong() * 60L
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onStartSleepTimer(mins) },
+                            label = { Text("$mins min", style = MaterialTheme.typography.bodySmall) },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                    item {
+                        val isEndOfTrackSelected = sleepTimerState.isActive && sleepTimerState.isEndOfTrack
+                        FilterChip(
+                            selected = isEndOfTrackSelected,
+                            onClick = onSetSleepTimerEndOfTrack,
+                            label = { Text("End of Track", style = MaterialTheme.typography.bodySmall) },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- 3. Music Cache & Storage Card ---
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Storage,
+                                contentDescription = "Storage",
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "Music Cache & Storage",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Local high-speed audio cache for instant playback",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val mb = cacheSizeBytes / (1024f * 1024f)
+                    val formattedMb = if (cacheSizeBytes <= 0L) "0 MB" else "%.1f MB".format(mb)
+                    Column {
+                        Text(
+                            text = "Cached Data: $formattedMb",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Auto-managed limit: 350 MB",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onClearCache,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Clear Cache", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        // --- 4. Appearance & Theme Card ---
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Palette,
+                                contentDescription = "Theme",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Auto follows device theme, or lock Light/Dark",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1591,11 +2042,11 @@ private fun SettingsScreen(
 
         if (BuildConfig.DEBUG) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -1638,11 +2089,11 @@ private fun SettingsScreen(
         }
 
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("About & Updates", fontWeight = FontWeight.Bold)

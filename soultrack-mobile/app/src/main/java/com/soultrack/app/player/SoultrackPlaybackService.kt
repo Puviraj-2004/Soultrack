@@ -48,6 +48,8 @@ class SoultrackPlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
 
+        (applicationContext as? SoultrackApp)?.audioFxManager?.attachSession(player.audioSessionId)
+
         val launchIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -75,6 +77,7 @@ class SoultrackPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        (applicationContext as? SoultrackApp)?.audioFxManager?.detachSession()
         mediaSession?.run {
             player.release()
             release()

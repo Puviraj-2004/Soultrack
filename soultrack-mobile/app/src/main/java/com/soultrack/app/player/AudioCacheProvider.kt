@@ -35,6 +35,24 @@ object AudioCacheProvider {
         }
     }
 
+    fun getCacheSizeBytes(context: Context): Long {
+        return try {
+            get(context).cacheSpace
+        } catch (_: Throwable) {
+            0L
+        }
+    }
+
+    fun clearCache(context: Context) {
+        try {
+            val cache = get(context)
+            val keys = cache.keys.toList()
+            for (key in keys) {
+                cache.removeResource(key)
+            }
+        } catch (_: Throwable) {}
+    }
+
     /** Creates an ExoPlayer cache data source backed by the shared OkHttp connection pool. */
     fun createCacheDataSourceFactory(context: Context, httpClient: OkHttpClient): CacheDataSource.Factory {
         val upstreamFactory = OkHttpDataSource.Factory(httpClient as Call.Factory)

@@ -198,6 +198,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val userLibraryStore = app.userLibraryStore
     private val updater = app.appUpdater
     val playerController = app.playerController
+    val audioFxManager = app.audioFxManager
+    val sleepTimerState = playerController.sleepTimerState
+    val audioFxState = audioFxManager.state
+
+    private val _cacheSizeBytes = MutableStateFlow(0L)
+    val cacheSizeBytes: StateFlow<Long> = _cacheSizeBytes.asStateFlow()
 
     private val rawSongs = MutableStateFlow<List<SongDto>>(emptyList())
     private val homeFilterFlow = MutableStateFlow("All")
@@ -236,6 +242,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             refreshLibrary()
             checkForUpdates(silent = true)
+            updateCacheSize()
             startPeriodicSync()
         }
     }
@@ -574,4 +581,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun updateCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _cacheSizeBytes.value = com.soultrack.app.player.AudioCacheProvider.getCacheSizeBytes(app)
+        }
+    }
+
+    fun clearAudioCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            com.soultrack.app.player.AudioCacheProvider.clearCache(app)
+            _cacheSizeBytes.value = com.soultrack.app.player.AudioCacheProvider.getCacheSizeBytes(app)
+        }
+    }
+
+    fun startSleepTimer(minutes: Int) = playerController.startSleepTimer(minutes)
+    fun setSleepTimerEndOfTrack() = playerController.setSleepTimerEndOfTrack()
+    fun cancelSleepTimer() = playerController.cancelSleepTimer()
+
+    fun setAudioFxEnabled(enabled: Boolean) = audioFxManager.setEnabled(enabled)
+    fun setBassBoost(strength: Int) = audioFxManager.setBassBoost(strength)
+    fun setEqualizerPreset(preset: String) = audioFxManager.setPreset(preset)
+    fun setBandLevel(bandIndex: Short, levelMb: Short) = audioFxManager.setBandLevel(bandIndex, levelMb)
 }

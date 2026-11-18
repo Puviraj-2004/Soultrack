@@ -12,6 +12,7 @@ import com.soultrack.app.data.CatalogCache
 import com.soultrack.app.data.ServerPreferences
 import com.soultrack.app.data.SoultrackApi
 import com.soultrack.app.data.UserLibraryStore
+import com.soultrack.app.player.AudioFxManager
 import com.soultrack.app.player.PlayerController
 import com.soultrack.app.ui.ArtworkRatioRegistry
 import com.soultrack.app.update.AppUpdater
@@ -27,6 +28,8 @@ class SoultrackApp : Application(), ImageLoaderFactory {
         private set
     lateinit var playerController: PlayerController
         private set
+    lateinit var audioFxManager: AudioFxManager
+        private set
     lateinit var appUpdater: AppUpdater
         private set
 
@@ -37,6 +40,7 @@ class SoultrackApp : Application(), ImageLoaderFactory {
         catalogCache = CatalogCache(this)
         userLibraryStore = UserLibraryStore(this)
         api = SoultrackApi()
+        audioFxManager = AudioFxManager(this)
         playerController = PlayerController(
             context = this,
             api = api,

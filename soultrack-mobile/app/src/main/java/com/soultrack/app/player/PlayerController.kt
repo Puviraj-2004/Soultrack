@@ -25,6 +25,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @Immutable
+data class SleepTimerState(
+    val isActive: Boolean = false,
+    val remainingSeconds: Long = 0L,
+    val totalSeconds: Long = 0L,
+    val isEndOfTrack: Boolean = false
+) {
+    val formattedRemaining: String
+        get() {
+            if (!isActive) return ""
+            if (isEndOfTrack) return "End of track"
+            val m = remainingSeconds / 60
+            val s = remainingSeconds % 60
+            return "%02d:%02d".format(m, s)
+        }
+}
+
+@Immutable
 data class PlaybackProgress(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
@@ -85,9 +102,13 @@ class PlayerController(
     private val _progressState = MutableStateFlow(PlaybackProgress())
     val progressState: StateFlow<PlaybackProgress> = _progressState.asStateFlow()
 
+    private val _sleepTimerState = MutableStateFlow(SleepTimerState())
+    val sleepTimerState: StateFlow<SleepTimerState> = _sleepTimerState.asStateFlow()
+
     private var controller: MediaController? = null
     private var progressJob: Job? = null
     private var prefetchJob: Job? = null
+    private var sleepTimerJob: Job? = null
     private var managedQueue = ManagedQueueState()
     private var shuffleActive: Boolean = false
     private var smartMixActive: Boolean = false
@@ -126,6 +147,20 @@ class PlayerController(
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             syncFromController(player)
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (_sleepTimerState.value.isActive && _sleepTimerState.value.isEndOfTrack) {
+                controller?.pause()
+                cancelSleepTimer()
+            }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED && _sleepTimerState.value.isActive && _sleepTimerState.value.isEndOfTrack) {
+                controller?.pause()
+                cancelSleepTimer()
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -623,5 +658,60 @@ class PlayerController(
         }
         lastPrefetchedSongId = null
         syncFromController(mc)
+    }
+
+    fun startSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) {
+            cancelSleepTimer()
+            return
+        }
+        val totalSecs = minutes.toLong() * 60L
+        _sleepTimerState.value = SleepTimerState(
+            isActive = true,
+            totalSeconds = totalSecs,
+            remainingSeconds = totalSecs,
+            isEndOfTrack = false
+        )
+        sleepTimerJob = scope.launch {
+            var remaining = totalSecs
+            while (remaining > 0) {
+                delay(1000L)
+                remaining--
+                _sleepTimerState.update { it.copy(remainingSeconds = remaining) }
+                if (remaining in 1..5) {
+                    controller?.let { mc ->
+                        if (mc.isPlaying) {
+                            mc.volume = (remaining.toFloat() / 5f).coerceIn(0.1f, 1f)
+                        }
+                    }
+                }
+            }
+            controller?.let { mc ->
+                mc.pause()
+                mc.volume = 1.0f
+            }
+            _sleepTimerState.value = SleepTimerState()
+            sleepTimerJob = null
+        }
+    }
+
+    fun setSleepTimerEndOfTrack() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        controller?.volume = 1.0f
+        _sleepTimerState.value = SleepTimerState(
+            isActive = true,
+            totalSeconds = 0L,
+            remainingSeconds = 0L,
+            isEndOfTrack = true
+        )
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        controller?.volume = 1.0f
+        _sleepTimerState.value = SleepTimerState()
     }
 }
