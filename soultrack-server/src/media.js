@@ -9,12 +9,15 @@ const execFileAsync = promisify(execFile)
 function cleanExecError(err, fallback) {
   const detail = (err?.stderr || err?.message || '').toString().trim()
   if (!detail) return fallback
-  const lines = detail.split(/\r?\n/).filter(Boolean)
-  const lastLine = lines[lines.length - 1].slice(0, 260)
+  const lines = detail
+    .split(/\r?\n|\r/)
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('size=') && !l.startsWith('frame=') && !l.startsWith('[download]'))
+  const lastLine = (lines[lines.length - 1] || '').slice(0, 260)
   if (/Failed to extract any player response|Sign in to confirm/i.test(lastLine)) {
     return `${lastLine} (Tip: YouTube may be blocking this server IP — check Render logs or configure YTDLP_COOKIES_B64 / YTDLP_PROXY, or use Upload Audio.)`
   }
-  return lastLine
+  return lastLine || fallback
 }
 
 export function normalizeCookiesText(rawText) {
@@ -52,7 +55,13 @@ export function createMediaTools(config) {
   }
 
   async function runYtDlp(args, timeoutMs) {
-    const baseArgs = ['--no-playlist', '--force-ipv4']
+    const baseArgs = [
+      '--no-playlist',
+      '--force-ipv4',
+      '--extractor-args', 'youtube:player_client=android,web',
+      '--retries', '5',
+      '--fragment-retries', '5',
+    ]
     if (config.ytDlpJsRuntime) {
       baseArgs.push('--js-runtimes', config.ytDlpJsRuntime, '--remote-components', 'ejs:github')
     }
@@ -259,49 +268,61 @@ export function createMediaTools(config) {
 
       // 1. Primary AI: Groq (Ultra-fast LPU inference: ~300ms)
       if (config.groqApiKey) {
-        try {
-          const groqModel = config.groqModel || 'llama-3.3-70b-versatile'
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${config.groqApiKey}`,
-            },
-            body: JSON.stringify({
-              model: groqModel,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are an expert music metadata classifier. Return only a valid JSON object matching the requested schema.',
-                },
-                {
-                  role: 'user',
-                  content: prompt,
-                },
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0.1,
-              max_tokens: 512,
-            }),
-            signal: AbortSignal.timeout(6_000),
-          })
+        const groqCandidateModels = [
+          config.groqModel,
+          'openai/gpt-oss-20b',
+          'openai/gpt-oss-120b',
+          'qwen/qwen3.8-27b',
+          'llama-3.3-70b-versatile',
+        ].filter(Boolean)
 
-          if (res.ok) {
-            const json = await res.json()
-            const rawContent = json?.choices?.[0]?.message?.content
-            if (rawContent) {
-              const parsed = JSON.parse(rawContent)
-              if (parsed && typeof parsed === 'object') {
-                return parsed
+        const uniqueGroqModels = [...new Set(groqCandidateModels)]
+
+        for (const groqModel of uniqueGroqModels) {
+          try {
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.groqApiKey}`,
+              },
+              body: JSON.stringify({
+                model: groqModel,
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are an expert music metadata classifier. Return only a valid JSON object matching the requested schema.',
+                  },
+                  {
+                    role: 'user',
+                    content: prompt,
+                  },
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.1,
+                max_tokens: 512,
+              }),
+              signal: AbortSignal.timeout(6_000),
+            })
+
+            if (res.ok) {
+              const json = await res.json()
+              const rawContent = json?.choices?.[0]?.message?.content
+              if (rawContent) {
+                const parsed = JSON.parse(rawContent)
+                if (parsed && typeof parsed === 'object') {
+                  return parsed
+                }
               }
+            } else {
+              const errBody = await res.text().catch(() => '')
+              console.warn(`[groq] Model ${groqModel} returned HTTP ${res.status}: ${errBody.slice(0, 160)}`)
             }
-          } else {
-            const errBody = await res.text().catch(() => '')
-            console.warn(`[groq] API returned HTTP ${res.status}: ${errBody.slice(0, 160)}`)
+          } catch (groqErr) {
+            console.warn(`[groq] Model ${groqModel} failed: ${groqErr.message}`)
           }
-        } catch (groqErr) {
-          console.warn(`[groq] Failed: ${groqErr.message}. Falling back to Gemini...`)
         }
+        console.warn('[groq] All Groq candidate models failed. Falling back to Gemini...')
       }
 
       // 2. Fallback AI: Google Gemini
@@ -309,6 +330,9 @@ export function createMediaTools(config) {
       try {
         const candidateModels = [
           config.geminiModel,
+          'gemini-2.5-flash',
+          'gemini-flash-latest',
+          'gemini-2.5-flash-lite',
           'gemini-3.5-flash-lite',
           'gemini-3.5-flash',
         ].filter(Boolean)

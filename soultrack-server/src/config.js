@@ -53,9 +53,9 @@ export function loadConfig(env = process.env) {
     ffmpegBin: (env.FFMPEG_BIN || 'ffmpeg').trim(),
     ffprobeBin: (env.FFPROBE_BIN || 'ffprobe').trim(),
     groqApiKey: (env.GROQ_API_KEY || '').trim(),
-    groqModel: (env.GROQ_MODEL || 'llama-3.3-70b-versatile').trim(),
+    groqModel: (env.GROQ_MODEL || 'openai/gpt-oss-120b').trim(),
     geminiApiKey: (env.GEMINI_API_KEY || '').trim(),
-    geminiModel: (env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim(),
+    geminiModel: (env.GEMINI_MODEL || 'gemini-2.5-flash').trim(),
     defaultAppRelease: {
       versionCode: Number(env.APP_LATEST_VERSION_CODE) || 1,
       versionName: env.APP_LATEST_VERSION_NAME || '1.0.0',
