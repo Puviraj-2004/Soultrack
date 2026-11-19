@@ -23,8 +23,8 @@ android {
         applicationId = "com.soultrack.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
 
         // Override at build time with -PSOULTRACK_SERVER_URL=https://your-render-app.onrender.com
         val defaultServerUrl = (project.findProperty("SOULTRACK_SERVER_URL") as String?)
