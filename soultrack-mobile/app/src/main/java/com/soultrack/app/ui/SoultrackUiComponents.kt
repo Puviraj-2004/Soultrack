@@ -1,5 +1,7 @@
 package com.soultrack.app.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -28,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -828,6 +831,29 @@ internal fun FullPlayerArtwork(song: SongDto) {
         label = "fullPlayerArtworkRatio"
     )
 
+    val palette = rememberArtworkPalette(song.thumbnailUrl)
+    val animatedGlowPrimary by animateColorAsState(
+        targetValue = palette.primary.copy(alpha = 0.65f),
+        animationSpec = tween(durationMillis = 750, easing = FastOutSlowInEasing),
+        label = "ambientGlowPrimary"
+    )
+    val animatedGlowSecondary by animateColorAsState(
+        targetValue = palette.secondary.copy(alpha = 0.45f),
+        animationSpec = tween(durationMillis = 750, easing = FastOutSlowInEasing),
+        label = "ambientGlowSecondary"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "ambientGlowPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowPulseScale"
+    )
+
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
@@ -844,12 +870,35 @@ internal fun FullPlayerArtwork(song: SongDto) {
             targetWidth = maxH * animatedRatio
         }
 
+        // Ambient Glow Layer behind artwork
+        Box(
+            modifier = Modifier
+                .size(targetWidth * 1.18f * pulseScale, targetHeight * 1.18f * pulseScale)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            animatedGlowPrimary,
+                            animatedGlowSecondary,
+                            Color.Transparent
+                        )
+                    ),
+                    shape = RoundedCornerShape(32.dp)
+                )
+                .blur(32.dp)
+        )
+
         ArtworkBox(
             url = song.thumbnailUrl,
             width = targetWidth,
             height = targetHeight,
             corner = 20.dp,
-            modifier = Modifier.shadow(10.dp, RoundedCornerShape(20.dp), clip = false),
+            modifier = Modifier.shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(20.dp),
+                spotColor = animatedGlowPrimary,
+                ambientColor = animatedGlowSecondary,
+                clip = false
+            ),
             onAspectRatioMeasured = { measuredRatio = it }
         )
     }

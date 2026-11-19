@@ -30,6 +30,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -2146,14 +2149,42 @@ private fun MiniPlayerBar(
 ) {
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
 
+    val palette = rememberArtworkPalette(song.thumbnailUrl)
+    val animatedGlowColor by animateColorAsState(
+        targetValue = palette.primary.copy(alpha = 0.55f),
+        animationSpec = tween(durationMillis = 600),
+        label = "miniPlayerGlow"
+    )
+    val animatedSecondaryGlow by animateColorAsState(
+        targetValue = palette.secondary.copy(alpha = 0.35f),
+        animationSpec = tween(durationMillis = 600),
+        label = "miniPlayerSecondaryGlow"
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 4.dp)
             .offset { IntOffset((dragOffsetX * 0.25f).roundToInt(), 0) }
-            .shadow(4.dp, RoundedCornerShape(16.dp), clip = false)
+            .shadow(
+                elevation = 6.dp,
+                shape = RoundedCornerShape(16.dp),
+                spotColor = animatedGlowColor,
+                ambientColor = animatedSecondaryGlow,
+                clip = false
+            )
             .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .border(
+                width = 1.2.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        animatedGlowColor,
+                        animatedSecondaryGlow,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                    )
+                ),
+                shape = RoundedCornerShape(16.dp)
+            )
             .pointerInput(playerState.hasNext, playerState.hasPrevious) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
@@ -2348,8 +2379,32 @@ private fun FullPlayerSheet(
         }
     }
 
+    val palette = rememberArtworkPalette(song.thumbnailUrl)
+    val animatedBgTop by animateColorAsState(
+        targetValue = palette.darkMuted.copy(alpha = 0.70f),
+        animationSpec = tween(durationMillis = 750),
+        label = "fullPlayerBgTop"
+    )
+    val animatedAccent by animateColorAsState(
+        targetValue = palette.primary.copy(alpha = 0.20f),
+        animationSpec = tween(durationMillis = 750),
+        label = "fullPlayerAccent"
+    )
+    val surfaceColor = MaterialTheme.colorScheme.surface
+
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        animatedBgTop,
+                        animatedAccent,
+                        surfaceColor,
+                        surfaceColor
+                    )
+                )
+            ),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)

@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.androidx.media3.datasource.okhttp)
 
     implementation(libs.coil.compose)
+    implementation(libs.androidx.palette)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
 
