@@ -61,6 +61,15 @@ export function createIngestionWorker({ repo, storage, media, concurrency = 2 })
         extractWithAi: media.extractAiMetadata?.bind(media),
       })
 
+      const finalTitle = overrideTitle || meta.title || info.title
+      if (typeof repo.findSongByTitle === 'function' && finalTitle) {
+        const postDup = await repo.findSongByTitle(finalTitle, songId)
+        if (postDup) {
+          await storage.deleteKeys?.([audioKey]).catch(() => {})
+          throw new Error(`Song with title "${postDup.title}" already exists in catalog.`)
+        }
+      }
+
       let thumbnailUrl = meta.artworkUrl || info.thumbnailUrl
       let thumbnailKey = null
       let cover = await media.downloadImageFile(thumbnailUrl, tmpDir).catch(() => null)

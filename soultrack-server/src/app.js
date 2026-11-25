@@ -8,7 +8,7 @@ import helmet from 'helmet'
 import multer from 'multer'
 import { createFixedWindowRateLimiter, createLoginRateLimiter, requireAdmin, safeEqual, signAdminToken } from './auth.js'
 import { SERVER_ROOT } from './config.js'
-import { enrichSongWithMetadata, inferSongMetadata, normalizeTagsInput } from './metadata.js'
+import { cleanYoutubeDisplayTitle, enrichSongWithMetadata, inferSongMetadata, normalizeTagsInput } from './metadata.js'
 import { canonicalYoutubeUrl, extractYoutubeId } from './youtube.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -526,9 +526,24 @@ export function createApp({ repo, storage, worker, media, config }) {
       const discovered = await media.searchYoutubeSongs(query, limit)
       const existingSongs = await repo.listAllSongs()
       const existingYtIds = new Set(existingSongs.map(s => s.youtube_id).filter(Boolean))
+      const normalizeTitleKey = t => cleanYoutubeDisplayTitle(t).toLowerCase().replace(/[^a-z0-9\u0B80-\u0BFF]+/g, '')
+      const existingTitleKeys = new Set(
+        existingSongs
+          .filter(s => s.status === 'READY' || s.status === 'PROCESSING')
+          .map(s => normalizeTitleKey(s.title))
+          .filter(Boolean)
+      )
+      const seenBatchTitleKeys = new Set()
 
       const items = discovered.map(item => {
-        const alreadyExists = existingYtIds.has(item.id)
+        const titleKey = normalizeTitleKey(item.title)
+        const isExistingId = existingYtIds.has(item.id)
+        const isExistingTitle = Boolean(titleKey) && existingTitleKeys.has(titleKey)
+        const isBatchDuplicate = Boolean(titleKey) && seenBatchTitleKeys.has(titleKey)
+        if (titleKey && !isExistingId && !isExistingTitle) {
+          seenBatchTitleKeys.add(titleKey)
+        }
+        const alreadyExists = isExistingId || isExistingTitle || isBatchDuplicate
         return {
           youtubeId: item.id,
           title: item.title,
