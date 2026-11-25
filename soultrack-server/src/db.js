@@ -22,8 +22,10 @@ export function createPool(databaseUrl) {
       ? { rejectUnauthorized: process.env.PGSSL_NO_VERIFY !== 'true' }
       : false,
     max: 10,
-    connectionTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 20_000,
     idleTimeoutMillis: 20_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   })
 
   // Neon scales idle compute to zero and drops idle sockets; log rather than crashing the process.

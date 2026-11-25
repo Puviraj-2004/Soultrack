@@ -84,6 +84,16 @@ export function createPgRepository(pool) {
       return rows[0] || null
     },
 
+    async listProcessingYoutubeSongs() {
+      const { rows } = await pool.query(
+        `SELECT id, youtube_id
+         FROM songs
+         WHERE status = 'PROCESSING' AND youtube_id IS NOT NULL
+         ORDER BY created_at ASC`
+      )
+      return rows
+    },
+
     async findSongByTitle(title, excludeId = null) {
       const normalized = String(title || '').replace(/\s+/g, ' ').trim().toLowerCase()
       if (!normalized) return null

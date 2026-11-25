@@ -25,6 +25,14 @@ const media = createMediaTools(config)
 const worker = createIngestionWorker({ repo, storage, media })
 const app = createApp({ repo, storage, worker, media, config })
 
+const pendingSongs = await repo.listProcessingYoutubeSongs()
+if (pendingSongs.length > 0) {
+  console.log(`Resuming ${pendingSongs.length} interrupted PROCESSING song(s)...`)
+  for (const song of pendingSongs) {
+    worker.enqueue({ songId: song.id, youtubeId: song.youtube_id, playlistId: null, overrides: null })
+  }
+}
+
 const server = app.listen(config.port, () => {
   console.log(`Soultrack server listening on port ${config.port} (storage=${storage.mode})`)
 })
