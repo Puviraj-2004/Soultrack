@@ -198,11 +198,48 @@ export function createMediaTools(config) {
     async lookupItunesMetadata(query) {
       if (!query?.trim()) return null
       try {
-        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query.trim())}&entity=song&limit=1`
+        const cleanQuery = query.trim()
+        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=8`
         const res = await fetch(url, { signal: AbortSignal.timeout(5_000) })
         if (!res.ok) return null
         const json = await res.json()
-        const match = json?.results?.[0]
+        const results = Array.isArray(json?.results) ? json.results : []
+        if (!results.length) return null
+
+        const stopWords = new Set(['song', 'songs', 'official', 'audio', 'video', 'tamil', 'hindi', 'from', 'the', 'and', 'with'])
+        const queryTokens = cleanQuery
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length >= 3 && !stopWords.has(w))
+
+        let bestMatch = null
+        let bestScore = 0
+
+        for (const item of results) {
+          const track = String(item?.trackName || '').toLowerCase()
+          const artist = String(item?.artistName || '').toLowerCase()
+          const album = String(item?.collectionName || '').toLowerCase()
+          const combined = `${track} ${artist} ${album}`
+
+          let trackMatches = 0
+          let totalMatches = 0
+          for (const token of queryTokens) {
+            if (track.includes(token)) trackMatches += 1
+            if (combined.includes(token)) totalMatches += 1
+          }
+
+          // Require the actual track title to match at least one meaningful query token
+          if (queryTokens.length > 0 && trackMatches === 0) continue
+
+          const score = trackMatches * 3 + totalMatches
+          if (score > bestScore) {
+            bestScore = score
+            bestMatch = item
+          }
+        }
+
+        const match = bestMatch
         if (!match) return null
         const rawArtwork = match.artworkUrl100 || match.artworkUrl60 || null
         const highResArtwork = rawArtwork
