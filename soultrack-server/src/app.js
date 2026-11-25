@@ -570,23 +570,46 @@ export function createApp({ repo, storage, worker, media, config }) {
 
   app.post('/api/admin/ingest/discover/confirm', adminGuard, localhostOnlyGuard, async (req, res, next) => {
     try {
-      const urls = Array.isArray(req.body?.urls) ? req.body.urls : []
+      const rawItems = Array.isArray(req.body?.items)
+        ? req.body.items
+        : (Array.isArray(req.body?.urls) ? req.body.urls.map(url => ({ url, title: '' })) : [])
       const playlistId = req.body?.playlistId ? String(req.body.playlistId) : null
       if (playlistId && !isValidUuid(playlistId)) {
         return res.status(400).json({ error: 'Invalid playlistId.' })
       }
 
-      const uniqueUrls = [...new Set(
-        urls.map(u => extractYoutubeId(String(u || ''))).filter(Boolean).map(canonicalYoutubeUrl)
-      )]
-      if (!uniqueUrls.length) {
+      const normalizeTitleKey = t => cleanYoutubeDisplayTitle(t || '').toLowerCase().replace(/[^a-z0-9\u0B80-\u0BFF]+/g, '')
+      const seenYtIds = new Set()
+      const candidates = []
+      for (const entry of rawItems) {
+        const youtubeId = extractYoutubeId(String(entry?.url || entry || ''))
+        if (!youtubeId || seenYtIds.has(youtubeId)) continue
+        seenYtIds.add(youtubeId)
+        candidates.push({ youtubeId, url: canonicalYoutubeUrl(youtubeId), title: String(entry?.title || '').trim() })
+      }
+      if (!candidates.length) {
         return res.status(400).json({ error: 'Select at least one song to queue.' })
       }
 
-      const results = { total: uniqueUrls.length, queued: 0, skippedDuplicates: 0, songs: [] }
-      for (const url of uniqueUrls) {
-        const youtubeId = extractYoutubeId(url)
-        if (!youtubeId) continue
+      const existingSongs = await repo.listAllSongs()
+      const existingTitleKeys = new Set(
+        existingSongs
+          .filter(s => s.status === 'READY' || s.status === 'PROCESSING')
+          .map(s => normalizeTitleKey(s.title))
+          .filter(Boolean)
+      )
+      const seenBatchTitleKeys = new Set()
+
+      const results = { total: candidates.length, queued: 0, skippedDuplicates: 0, songs: [] }
+      for (const item of candidates) {
+        const { youtubeId, title } = item
+        const titleKey = normalizeTitleKey(title)
+        if (titleKey && (existingTitleKeys.has(titleKey) || seenBatchTitleKeys.has(titleKey))) {
+          results.skippedDuplicates++
+          results.songs.push({ youtubeId, status: 'duplicate', title })
+          continue
+        }
+
         const existing = await repo.findSongByYoutubeId(youtubeId)
         if (existing) {
           if (existing.status === 'READY') {
@@ -598,6 +621,7 @@ export function createApp({ repo, storage, worker, media, config }) {
           if (existing.status === 'FAILED') {
             await repo.updateSong(existing.id, { status: 'PROCESSING', error_message: null })
             worker.enqueue({ songId: existing.id, youtubeId, playlistId, overrides: null })
+            if (titleKey) seenBatchTitleKeys.add(titleKey)
             results.queued++
             results.songs.push({ youtubeId, status: 'requeued', songId: existing.id })
             continue
@@ -607,6 +631,7 @@ export function createApp({ repo, storage, worker, media, config }) {
           continue
         }
 
+        if (titleKey) seenBatchTitleKeys.add(titleKey)
         const created = await repo.createSong({
           source_type: 'youtube',
           youtube_id: youtubeId,

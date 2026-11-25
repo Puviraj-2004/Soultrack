@@ -853,20 +853,23 @@ function bindEvents() {
     if (!listEl || !resultsWrap) return
 
     listEl.replaceChildren()
-    discoveredItems = Array.isArray(items) ? items : []
+    const allItems = Array.isArray(items) ? items : []
+    discoveredItems = allItems.filter(i => !i.alreadyExists)
     resultsWrap.hidden = false
 
-    const newCount = discoveredItems.filter(i => !i.alreadyExists).length
-    const dupCount = discoveredItems.length - newCount
+    const newCount = discoveredItems.length
+    const dupCount = allItems.length - newCount
     if (summaryEl) {
-      summaryEl.textContent = `${discoveredItems.length} found (${newCount} new, ${dupCount} already in library)`
+      summaryEl.textContent = `${newCount} new tracks ready (${dupCount} duplicates auto-removed)`
     }
 
     if (!discoveredItems.length) {
       const empty = document.createElement('p')
       empty.className = 'hint'
       empty.style.padding = '0.75rem'
-      empty.textContent = 'No matching songs found after filtering shorts/jukeboxes.'
+      empty.textContent = dupCount > 0
+        ? `All ${dupCount} found songs are already in your catalog (auto-removed).`
+        : 'No matching songs found after filtering shorts/jukeboxes.'
       listEl.append(empty)
       updateDiscoverSubmitCount()
       return
@@ -874,13 +877,13 @@ function bindEvents() {
 
     for (const item of discoveredItems) {
       const row = document.createElement('label')
-      row.className = `discover-item${item.alreadyExists ? ' is-duplicate' : ''}`
+      row.className = 'discover-item'
 
       const cb = document.createElement('input')
       cb.type = 'checkbox'
       cb.value = item.url
-      cb.disabled = item.alreadyExists
-      cb.checked = !item.alreadyExists
+      cb.dataset.title = item.title || ''
+      cb.checked = true
       cb.addEventListener('change', updateDiscoverSubmitCount)
 
       const img = document.createElement('img')
@@ -903,12 +906,6 @@ function bindEvents() {
       meta.append(titleEl, subEl)
 
       row.append(cb, img, meta)
-      if (item.alreadyExists) {
-        const badge = document.createElement('span')
-        badge.className = 'discover-badge'
-        badge.textContent = 'Already Added'
-        row.append(badge)
-      }
       listEl.append(row)
     }
     updateDiscoverSubmitCount()
@@ -1020,10 +1017,10 @@ function bindEvents() {
     btn.disabled = true
 
     if (importMode === 'discover') {
-      const selectedUrls = [...(el('yt-discover-list')?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(
-        cb => cb.value
+      const selectedItems = [...(el('yt-discover-list')?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(
+        cb => ({ url: cb.value, title: cb.dataset.title || '' })
       )
-      if (!selectedUrls.length) {
+      if (!selectedItems.length) {
         setStatus(status, 'Select at least one song from the preview list.', true)
         btn.disabled = false
         return
@@ -1033,7 +1030,7 @@ function bindEvents() {
         const res = await api('/api/admin/ingest/discover/confirm', {
           method: 'POST',
           body: JSON.stringify({
-            urls: selectedUrls,
+            items: selectedItems,
             playlistId: el('yt-discover-playlist')?.value || null,
           }),
         })
