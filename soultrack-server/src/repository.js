@@ -6,12 +6,23 @@ export function createPgRepository(pool) {
       await pool.query('SELECT 1')
     },
 
-    async listReadySongs({ q = '', limit = 100, offset = 0 } = {}) {
-      const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500)
+    async listReadySongs({ q = '', limit, offset = 0 } = {}) {
+      const parsedLimit = Number(limit)
+      const hasLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+      const safeLimit = hasLimit ? Math.min(Math.max(Math.floor(parsedLimit), 1), 5000) : null
       const safeOffset = Math.max(Number(offset) || 0, 0)
       const needle = q.trim()
 
       if (needle) {
+        const params = [`%${needle}%`]
+        let limitClause = ''
+        if (safeLimit !== null) {
+          params.push(safeLimit, safeOffset)
+          limitClause = 'LIMIT $2 OFFSET $3'
+        } else if (safeOffset > 0) {
+          params.push(safeOffset)
+          limitClause = 'OFFSET $2'
+        }
         const { rows } = await pool.query(
           `SELECT id, source_type, youtube_id, title, artist, duration_seconds, audio_url, thumbnail_url, status,
                   genre, mood, language, album, tags, play_count, last_played_at, created_at
@@ -22,20 +33,29 @@ export function createPgRepository(pool) {
                OR language ILIKE $1 OR album ILIKE $1 OR array_to_string(tags, ' ') ILIKE $1
              )
            ORDER BY created_at DESC, title ASC
-           LIMIT $2 OFFSET $3`,
-          [`%${needle}%`, safeLimit, safeOffset]
+           ${limitClause}`,
+          params
         )
         return rows
       }
 
+      const params = []
+      let limitClause = ''
+      if (safeLimit !== null) {
+        params.push(safeLimit, safeOffset)
+        limitClause = 'LIMIT $1 OFFSET $2'
+      } else if (safeOffset > 0) {
+        params.push(safeOffset)
+        limitClause = 'OFFSET $1'
+      }
       const { rows } = await pool.query(
         `SELECT id, source_type, youtube_id, title, artist, duration_seconds, audio_url, thumbnail_url, status,
                 genre, mood, language, album, tags, play_count, last_played_at, created_at
          FROM songs
          WHERE status = 'READY'
          ORDER BY created_at DESC, title ASC
-         LIMIT $1 OFFSET $2`,
-        [safeLimit, safeOffset]
+         ${limitClause}`,
+        params
       )
       return rows
     },
