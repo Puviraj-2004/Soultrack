@@ -97,6 +97,20 @@ export function createApp({ repo, storage, worker, media, config }) {
   app.set('trust proxy', 1)
 
   const adminGuard = requireAdmin(config)
+  const localhostOnlyGuard = (req, res, next) => {
+    if (config.nodeEnv === 'production') {
+      return res.status(403).json({ error: 'Auto-Discover Bot is restricted to localhost only and blocked on production server IPs.' })
+    }
+    if (req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.headers['forwarded']) {
+      return res.status(403).json({ error: 'Remote proxy access is blocked. Run from localhost directly.' })
+    }
+    const remoteAddr = String(req.socket?.remoteAddress || req.ip || '')
+    const isLoopback = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1'
+    if (!isLoopback) {
+      return res.status(403).json({ error: 'Auto-Discover Bot is restricted to localhost (127.0.0.1) only.' })
+    }
+    next()
+  }
   const loginLimiter = createLoginRateLimiter()
   const playLimiter = createFixedWindowRateLimiter({ windowMs: 60 * 1000, maxRequests: 60 })
 
@@ -490,6 +504,110 @@ export function createApp({ repo, storage, worker, media, config }) {
           status: 'queued',
           songId: created.id,
         })
+      }
+
+      res.status(202).json(results)
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  app.post('/api/admin/ingest/discover', adminGuard, localhostOnlyGuard, async (req, res, next) => {
+    try {
+      const query = String(req.body?.query || '').trim()
+      if (!query || query.length < 2) {
+        return res.status(400).json({ error: 'Please enter a search keyword or YouTube playlist URL.' })
+      }
+      if (typeof media.searchYoutubeSongs !== 'function') {
+        return res.status(503).json({ error: 'YouTube discover search is not available.' })
+      }
+
+      const limit = Math.min(Math.max(Number(req.body?.limit) || 50, 5), 100)
+      const discovered = await media.searchYoutubeSongs(query, limit)
+      const existingSongs = await repo.listAllSongs()
+      const existingYtIds = new Set(existingSongs.map(s => s.youtube_id).filter(Boolean))
+
+      const items = discovered.map(item => {
+        const alreadyExists = existingYtIds.has(item.id)
+        return {
+          youtubeId: item.id,
+          title: item.title,
+          channel: item.channel || '',
+          durationSeconds: item.durationSeconds || 0,
+          thumbnailUrl: item.thumbnailUrl,
+          url: item.url,
+          alreadyExists,
+        }
+      })
+
+      const duplicateCount = items.filter(i => i.alreadyExists).length
+      res.json({
+        query,
+        totalFound: items.length,
+        newCount: items.length - duplicateCount,
+        duplicateCount,
+        items,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  app.post('/api/admin/ingest/discover/confirm', adminGuard, localhostOnlyGuard, async (req, res, next) => {
+    try {
+      const urls = Array.isArray(req.body?.urls) ? req.body.urls : []
+      const playlistId = req.body?.playlistId ? String(req.body.playlistId) : null
+      if (playlistId && !isValidUuid(playlistId)) {
+        return res.status(400).json({ error: 'Invalid playlistId.' })
+      }
+
+      const uniqueUrls = [...new Set(
+        urls.map(u => extractYoutubeId(String(u || ''))).filter(Boolean).map(canonicalYoutubeUrl)
+      )]
+      if (!uniqueUrls.length) {
+        return res.status(400).json({ error: 'Select at least one song to queue.' })
+      }
+
+      const results = { total: uniqueUrls.length, queued: 0, skippedDuplicates: 0, songs: [] }
+      for (const url of uniqueUrls) {
+        const youtubeId = extractYoutubeId(url)
+        if (!youtubeId) continue
+        const existing = await repo.findSongByYoutubeId(youtubeId)
+        if (existing) {
+          if (existing.status === 'READY') {
+            if (playlistId) await repo.addSongToPlaylist(playlistId, existing.id).catch(() => {})
+            results.skippedDuplicates++
+            results.songs.push({ youtubeId, status: 'duplicate', title: existing.title, songId: existing.id })
+            continue
+          }
+          if (existing.status === 'FAILED') {
+            await repo.updateSong(existing.id, { status: 'PROCESSING', error_message: null })
+            worker.enqueue({ songId: existing.id, youtubeId, playlistId, overrides: null })
+            results.queued++
+            results.songs.push({ youtubeId, status: 'requeued', songId: existing.id })
+            continue
+          }
+          results.skippedDuplicates++
+          results.songs.push({ youtubeId, status: 'processing', songId: existing.id })
+          continue
+        }
+
+        const created = await repo.createSong({
+          source_type: 'youtube',
+          youtube_id: youtubeId,
+          title: `Importing ${youtubeId}...`,
+          artist: 'Soultrack',
+          genre: null,
+          mood: null,
+          language: null,
+          tags: [],
+          duration_seconds: 0,
+          audio_url: '',
+          status: 'PROCESSING',
+        })
+        worker.enqueue({ songId: created.id, youtubeId, playlistId, overrides: null })
+        results.queued++
+        results.songs.push({ youtubeId, status: 'queued', songId: created.id })
       }
 
       res.status(202).json(results)

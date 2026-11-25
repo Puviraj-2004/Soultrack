@@ -236,10 +236,15 @@ export function createMediaTools(config) {
             const id = entry?.id || entry?.url
             if (!id || typeof id !== 'string') return null
             const cleanId = id.replace(/^https?:\/\/.*v=/i, '').slice(0, 32)
+            const thumb = Array.isArray(entry?.thumbnails) && entry.thumbnails.length
+              ? entry.thumbnails[entry.thumbnails.length - 1]?.url
+              : null
             return {
               id: cleanId,
               title: (entry.title || 'Untitled Track').trim().slice(0, 200),
+              channel: (entry.channel || entry.uploader || '').trim().slice(0, 120),
               durationSeconds: Math.max(0, Math.round(Number(entry.duration) || 0)),
+              thumbnailUrl: thumb || `https://i.ytimg.com/vi/${cleanId}/hqdefault.jpg`,
               url: `https://www.youtube.com/watch?v=${cleanId}`,
             }
           })
@@ -247,6 +252,58 @@ export function createMediaTools(config) {
       } catch (err) {
         throw new Error(`yt-dlp playlist failed: ${cleanExecError(err, 'Could not inspect playlist')}`)
       }
+    },
+
+    async searchYoutubeSongs(query, maxResults = 50) {
+      const cleanQuery = String(query || '').trim()
+      if (!cleanQuery) {
+        throw new Error('Search query is required.')
+      }
+      const safeLimit = Math.min(Math.max(Number(maxResults) || 50, 5), 100)
+      const isPlaylistUrl = /[?&]list=([a-zA-Z0-9_-]+)/i.test(cleanQuery) && /youtu(\.be|be\.com)/i.test(cleanQuery)
+      const rawEntries = isPlaylistUrl
+        ? await this.fetchYoutubePlaylistEntries(cleanQuery, safeLimit)
+        : await (async () => {
+            try {
+              const { stdout } = await runYtDlp([
+                '--flat-playlist',
+                '--dump-single-json',
+                '--no-warnings',
+                `ytsearch${safeLimit}:${cleanQuery}`,
+              ], 60_000)
+              const info = JSON.parse(stdout)
+              const entries = Array.isArray(info?.entries) ? info.entries : []
+              return entries
+                .map(entry => {
+                  const id = entry?.id || entry?.url
+                  if (!id || typeof id !== 'string') return null
+                  const cleanId = id.replace(/^https?:\/\/.*v=/i, '').slice(0, 32)
+                  const thumb = Array.isArray(entry?.thumbnails) && entry.thumbnails.length
+                    ? entry.thumbnails[entry.thumbnails.length - 1]?.url
+                    : null
+                  return {
+                    id: cleanId,
+                    title: (entry.title || 'Untitled Track').trim().slice(0, 200),
+                    channel: (entry.channel || entry.uploader || '').trim().slice(0, 120),
+                    durationSeconds: Math.max(0, Math.round(Number(entry.duration) || 0)),
+                    thumbnailUrl: thumb || `https://i.ytimg.com/vi/${cleanId}/hqdefault.jpg`,
+                    url: `https://www.youtube.com/watch?v=${cleanId}`,
+                  }
+                })
+                .filter(Boolean)
+            } catch (err) {
+              throw new Error(`yt-dlp search failed: ${cleanExecError(err, 'Could not search YouTube')}`)
+            }
+          })()
+
+      const noiseRegex = /\b(reaction|review|whatsapp\s*status|status\s*video|making\s*video|interview|teaser|trailer|shorts?|full\s*movie|jukebox|1\s*hour|non[\s-]*stop)\b/i
+      return rawEntries.filter(item => {
+        if (!item?.id || !item?.title) return false
+        if (item.title === '[Private video]' || item.title === '[Deleted video]') return false
+        if (item.durationSeconds > 0 && (item.durationSeconds < 90 || item.durationSeconds > 540)) return false
+        if (noiseRegex.test(item.title)) return false
+        return true
+      })
     },
 
     async extractAiMetadata({ title = '', artist = '', cleanQuery = '', description = '' } = {}) {

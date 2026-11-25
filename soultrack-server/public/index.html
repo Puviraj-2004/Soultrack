@@ -144,6 +144,7 @@
         <div class="import-mode-tabs" role="tablist">
           <button type="button" id="yt-tab-single" class="tab-btn active" role="tab" aria-selected="true">Single URL</button>
           <button type="button" id="yt-tab-bulk" class="tab-btn" role="tab" aria-selected="false">Bulk / Playlist Import ⚡</button>
+          <button type="button" id="yt-tab-discover" class="tab-btn" role="tab" aria-selected="false" hidden>Auto-Discover Bot 🤖</button>
         </div>
 
         <div id="yt-single-section">
@@ -237,6 +238,43 @@
             <select id="yt-bulk-playlist" name="bulkPlaylistId">
               <option value="">Library only</option>
             </select>
+          </div>
+        </div>
+
+        <div id="yt-discover-section" hidden>
+          <p class="hint">Localhost-only bot: search Tamil songs, filter out shorts/jukeboxes, preview &amp; confirm before queueing.</p>
+          <div class="field">
+            <label for="yt-discover-query">Search Keyword / Artist / Playlist URL</label>
+            <div class="discover-search-row">
+              <input
+                id="yt-discover-query"
+                type="text"
+                placeholder="e.g. Anirudh Tamil hits 2024 or Yuvan melody"
+              />
+              <select id="yt-discover-limit" aria-label="Max songs to scan">
+                <option value="25">25 songs</option>
+                <option value="50" selected>50 songs</option>
+                <option value="100">100 songs</option>
+              </select>
+              <button id="yt-discover-scan-btn" type="button" class="btn btn-ghost">Scan</button>
+            </div>
+          </div>
+
+          <div id="yt-discover-results" hidden>
+            <div class="discover-controls">
+              <span id="yt-discover-summary">0 new tracks found</span>
+              <div>
+                <button id="yt-discover-select-all" type="button" class="btn btn-ghost btn-sm">Select All New</button>
+                <button id="yt-discover-clear-all" type="button" class="btn btn-ghost btn-sm">Clear</button>
+              </div>
+            </div>
+            <div id="yt-discover-list" class="discover-list"></div>
+            <div class="field" style="margin-top:0.75rem">
+              <label for="yt-discover-playlist">Add confirmed songs to playlist (optional)</label>
+              <select id="yt-discover-playlist">
+                <option value="">Library only</option>
+              </select>
+            </div>
           </div>
         </div>
 

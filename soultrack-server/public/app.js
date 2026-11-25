@@ -258,7 +258,7 @@ async function confirmSignOut() {
 }
 
 function populatePlaylistSelects() {
-  const selectors = [el('yt-playlist'), el('yt-bulk-playlist'), el('upload-playlist'), el('edit-song-playlist')].filter(Boolean)
+  const selectors = [el('yt-playlist'), el('yt-bulk-playlist'), el('yt-discover-playlist'), el('upload-playlist'), el('edit-song-playlist')].filter(Boolean)
   selectors.forEach((select, idx) => {
     const prev = select.value
     select.replaceChildren()
@@ -829,31 +829,125 @@ function bindEvents() {
     }
   }
 
-  let isBulkMode = false
-  const setImportMode = bulk => {
-    isBulkMode = Boolean(bulk)
+  const isLocalhostClient = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+  if (isLocalhostClient && el('yt-tab-discover')) {
+    el('yt-tab-discover').hidden = false
+  }
+
+  let importMode = 'single' // 'single' | 'bulk' | 'discover'
+  let discoveredItems = []
+
+  const updateDiscoverSubmitCount = () => {
+    if (importMode !== 'discover') return
+    const submitBtn = el('ingest-submit-btn')
+    if (!submitBtn) return
+    const checkedCount = el('yt-discover-list')?.querySelectorAll('input[type="checkbox"]:checked').length || 0
+    submitBtn.textContent = checkedCount > 0 ? `Confirm & Queue (${checkedCount})` : 'Confirm & Queue'
+    submitBtn.disabled = checkedCount === 0
+  }
+
+  const renderDiscoverList = items => {
+    const listEl = el('yt-discover-list')
+    const resultsWrap = el('yt-discover-results')
+    const summaryEl = el('yt-discover-summary')
+    if (!listEl || !resultsWrap) return
+
+    listEl.replaceChildren()
+    discoveredItems = Array.isArray(items) ? items : []
+    resultsWrap.hidden = false
+
+    const newCount = discoveredItems.filter(i => !i.alreadyExists).length
+    const dupCount = discoveredItems.length - newCount
+    if (summaryEl) {
+      summaryEl.textContent = `${discoveredItems.length} found (${newCount} new, ${dupCount} already in library)`
+    }
+
+    if (!discoveredItems.length) {
+      const empty = document.createElement('p')
+      empty.className = 'hint'
+      empty.style.padding = '0.75rem'
+      empty.textContent = 'No matching songs found after filtering shorts/jukeboxes.'
+      listEl.append(empty)
+      updateDiscoverSubmitCount()
+      return
+    }
+
+    for (const item of discoveredItems) {
+      const row = document.createElement('label')
+      row.className = `discover-item${item.alreadyExists ? ' is-duplicate' : ''}`
+
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.value = item.url
+      cb.disabled = item.alreadyExists
+      cb.checked = !item.alreadyExists
+      cb.addEventListener('change', updateDiscoverSubmitCount)
+
+      const img = document.createElement('img')
+      img.className = 'discover-thumb'
+      img.src = item.thumbnailUrl || '/app-icon.png'
+      img.alt = ''
+      img.loading = 'lazy'
+
+      const meta = document.createElement('div')
+      meta.className = 'discover-meta'
+      const titleEl = document.createElement('div')
+      titleEl.className = 'discover-title'
+      titleEl.textContent = item.title
+      const subEl = document.createElement('div')
+      subEl.className = 'discover-sub'
+      const mins = Math.floor((item.durationSeconds || 0) / 60)
+      const secs = String((item.durationSeconds || 0) % 60).padStart(2, '0')
+      const durText = item.durationSeconds ? `${mins}:${secs}` : '?:??'
+      subEl.textContent = item.channel ? `${item.channel} • ${durText}` : durText
+      meta.append(titleEl, subEl)
+
+      row.append(cb, img, meta)
+      if (item.alreadyExists) {
+        const badge = document.createElement('span')
+        badge.className = 'discover-badge'
+        badge.textContent = 'Already Added'
+        row.append(badge)
+      }
+      listEl.append(row)
+    }
+    updateDiscoverSubmitCount()
+  }
+
+  const setImportMode = mode => {
+    importMode = mode === 'bulk' || mode === 'discover' ? mode : 'single'
     const tabSingle = el('yt-tab-single')
     const tabBulk = el('yt-tab-bulk')
+    const tabDiscover = el('yt-tab-discover')
     const singleSec = el('yt-single-section')
     const bulkSec = el('yt-bulk-section')
+    const discoverSec = el('yt-discover-section')
     const ytUrl = el('yt-url')
 
     if (tabSingle) {
-      tabSingle.classList.toggle('active', !isBulkMode)
-      tabSingle.setAttribute('aria-selected', !isBulkMode)
+      tabSingle.classList.toggle('active', importMode === 'single')
+      tabSingle.setAttribute('aria-selected', importMode === 'single')
     }
     if (tabBulk) {
-      tabBulk.classList.toggle('active', isBulkMode)
-      tabBulk.setAttribute('aria-selected', isBulkMode)
+      tabBulk.classList.toggle('active', importMode === 'bulk')
+      tabBulk.setAttribute('aria-selected', importMode === 'bulk')
     }
-    if (singleSec) singleSec.hidden = isBulkMode
-    if (bulkSec) bulkSec.hidden = !isBulkMode
-    if (ytUrl) ytUrl.required = !isBulkMode
+    if (tabDiscover) {
+      tabDiscover.classList.toggle('active', importMode === 'discover')
+      tabDiscover.setAttribute('aria-selected', importMode === 'discover')
+    }
+    if (singleSec) singleSec.hidden = importMode !== 'single'
+    if (bulkSec) bulkSec.hidden = importMode !== 'bulk'
+    if (discoverSec) discoverSec.hidden = importMode !== 'discover'
+    if (ytUrl) ytUrl.required = importMode === 'single'
 
     const submitBtn = el('ingest-submit-btn')
     if (submitBtn) {
-      if (isBulkMode) {
+      submitBtn.disabled = false
+      if (importMode === 'bulk') {
         submitBtn.textContent = 'Queue Bulk Import'
+      } else if (importMode === 'discover') {
+        updateDiscoverSubmitCount()
       } else {
         submitBtn.textContent = !el('yt-preview-panel').hidden ? 'Confirm & Import' : 'Queue Import'
       }
@@ -861,8 +955,51 @@ function bindEvents() {
     setStatus(el('ingest-status'), '')
   }
 
-  el('yt-tab-single')?.addEventListener('click', () => setImportMode(false))
-  el('yt-tab-bulk')?.addEventListener('click', () => setImportMode(true))
+  el('yt-tab-single')?.addEventListener('click', () => setImportMode('single'))
+  el('yt-tab-bulk')?.addEventListener('click', () => setImportMode('bulk'))
+  el('yt-tab-discover')?.addEventListener('click', () => setImportMode('discover'))
+
+  el('yt-discover-scan-btn')?.addEventListener('click', async () => {
+    const query = (el('yt-discover-query')?.value || '').trim()
+    const limit = Number(el('yt-discover-limit')?.value || 50)
+    const status = el('ingest-status')
+    const scanBtn = el('yt-discover-scan-btn')
+    setStatus(status, '')
+    if (!query) {
+      setStatus(status, 'Enter a search keyword or playlist URL to scan.', true)
+      el('yt-discover-query')?.focus()
+      return
+    }
+    scanBtn.disabled = true
+    scanBtn.textContent = 'Scanning...'
+    try {
+      const res = await api('/api/admin/ingest/discover', {
+        method: 'POST',
+        body: JSON.stringify({ query, limit }),
+      })
+      renderDiscoverList(res.items || [])
+      setStatus(status, `Scan complete: ${res.newCount} new songs ready to review.`, false)
+    } catch (err) {
+      setStatus(status, err.message, true)
+    } finally {
+      scanBtn.disabled = false
+      scanBtn.textContent = 'Scan'
+    }
+  })
+
+  el('yt-discover-select-all')?.addEventListener('click', () => {
+    el('yt-discover-list')?.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(cb => {
+      cb.checked = true
+    })
+    updateDiscoverSubmitCount()
+  })
+
+  el('yt-discover-clear-all')?.addEventListener('click', () => {
+    el('yt-discover-list')?.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = false
+    })
+    updateDiscoverSubmitCount()
+  })
 
   el('yt-preview-btn').addEventListener('click', fetchYtPreview)
   el('yt-url').addEventListener('paste', () => {
@@ -882,7 +1019,42 @@ function bindEvents() {
     setStatus(status, '')
     btn.disabled = true
 
-    if (isBulkMode) {
+    if (importMode === 'discover') {
+      const selectedUrls = [...(el('yt-discover-list')?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(
+        cb => cb.value
+      )
+      if (!selectedUrls.length) {
+        setStatus(status, 'Select at least one song from the preview list.', true)
+        btn.disabled = false
+        return
+      }
+      btn.textContent = 'Queueing Confirmed...'
+      try {
+        const res = await api('/api/admin/ingest/discover/confirm', {
+          method: 'POST',
+          body: JSON.stringify({
+            urls: selectedUrls,
+            playlistId: el('yt-discover-playlist')?.value || null,
+          }),
+        })
+        setStatus(
+          status,
+          `✓ Confirmed & queued ${res.queued} songs! (${res.skippedDuplicates} duplicates skipped). Downloading in background...`,
+          false
+        )
+        if (el('yt-discover-results')) el('yt-discover-results').hidden = true
+        if (el('yt-discover-list')) el('yt-discover-list').replaceChildren()
+        await refreshAll()
+      } catch (err) {
+        setStatus(status, err.message, true)
+      } finally {
+        btn.disabled = false
+        updateDiscoverSubmitCount()
+      }
+      return
+    }
+
+    if (importMode === 'bulk') {
       const bulkInput = (el('yt-bulk-input')?.value || '').trim()
       if (!bulkInput) {
         setStatus(status, 'Please paste at least one YouTube URL or a playlist link.', true)

@@ -181,6 +181,26 @@ test('Soultrack REST API, auth, ingestion worker, playlists, and version endpoin
     async lookupItunesMetadata() {
       return null
     },
+    async searchYoutubeSongs(query, limit) {
+      return [
+        {
+          id: 'vid11111111',
+          title: 'Existing Song',
+          channel: 'Test Channel',
+          durationSeconds: 200,
+          thumbnailUrl: 'https://i.ytimg.com/vi/vid11111111/hqdefault.jpg',
+          url: 'https://www.youtube.com/watch?v=vid11111111',
+        },
+        {
+          id: 'vid33333333',
+          title: `${query} New Hit`,
+          channel: 'Sony Music South',
+          durationSeconds: 245,
+          thumbnailUrl: 'https://i.ytimg.com/vi/vid33333333/hqdefault.jpg',
+          url: 'https://www.youtube.com/watch?v=vid33333333',
+        },
+      ].slice(0, limit)
+    },
   }
 
   const config = loadConfig({
@@ -504,6 +524,48 @@ test('Soultrack REST API, auth, ingestion worker, playlists, and version endpoin
     const bulkJson = await bulkRes.json()
     assert.equal(bulkJson.total, 2) // Deduplicated vid11111111
     assert.equal(bulkJson.queued, 2)
+
+    // Test Discover Bot: blocked when x-forwarded-for (remote proxy) is present
+    const blockedDiscoverRes = await fetch(`${baseUrl}/api/admin/ingest/discover`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'X-Forwarded-For': '203.0.113.5',
+      },
+      body: JSON.stringify({ query: 'Anirudh Tamil', limit: 25 }),
+    })
+    assert.equal(blockedDiscoverRes.status, 403)
+
+    // Test Discover Bot on localhost: scans and marks vid11111111 as duplicate
+    const discoverRes = await fetch(`${baseUrl}/api/admin/ingest/discover`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ query: 'Anirudh Tamil', limit: 25 }),
+    })
+    assert.equal(discoverRes.status, 200)
+    const discoverJson = await discoverRes.json()
+    assert.equal(discoverJson.totalFound, 2)
+    assert.equal(discoverJson.newCount, 1)
+    assert.equal(discoverJson.duplicateCount, 1)
+    assert.equal(discoverJson.items[0].alreadyExists, true)
+    assert.equal(discoverJson.items[1].alreadyExists, false)
+
+    // Test Discover Confirm: queues only confirmed new URL
+    const confirmRes = await fetch(`${baseUrl}/api/admin/ingest/discover/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ urls: [discoverJson.items[1].url] }),
+    })
+    assert.equal(confirmRes.status, 202)
+    const confirmJson = await confirmRes.json()
+    assert.equal(confirmJson.queued, 1)
   } finally {
     await new Promise(resolve => server.close(resolve))
   }
