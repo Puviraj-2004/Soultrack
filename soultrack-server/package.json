@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "migrate": "node src/migrate.js",
     "dedupe": "node src/dedupe.js",
+    "fix-posters": "node src/fix-posters.js",
     "test": "node --test test/*.test.js"
   },
   "engines": {
