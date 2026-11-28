@@ -85,6 +85,9 @@ try {
         thumbnail_key: key,
       })
       console.log(`UPDATED: "${song.title}" -> ${sourceLabel}`)
+    } catch (err) {
+      skipped += 1
+      console.log(`SKIP:    "${song.title}" — ${err?.message || 'network error'}`)
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
     }
